@@ -3,6 +3,36 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
-  "engines": { "node": ">=22" }
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@cloudflare/codemode": "0.5.1",
+    "@cloudflare/shell": "0.4.3",
+    "@cloudflare/think": "0.17.0",
+    "agents": "0.22.0",
+    "ai": "7.0.93",
+    "lucide-react": "0.577.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.54.5",
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@cloudflare/workers-types": "5.20260907.1",
+    "@types/babel__traverse": "7.28.0",
+    "@types/node": "25.0.10",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.0",
+    "wrangler": "4.129.1"
+  }
 }

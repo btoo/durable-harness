@@ -1,0 +1,15 @@
+{
+  "name": "@durable-harness/core",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@babel/parser": "8.0.4",
+    "@babel/traverse": "8.0.4",
+    "@babel/types": "8.0.4",
+    "@cfworker/json-schema": "4.1.1",
+    "sucrase": "3.35.1"
+  }
+}

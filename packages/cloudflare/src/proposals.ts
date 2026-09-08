@@ -76,6 +76,7 @@ export function modelCandidateGenerator(
           );
         },
       );
+      if (usage.totalTokens !== undefined) execution.reportUsage?.(usage.totalTokens);
       invariant(
         calls.length === 1 && calls[0]?.toolName === "submitCandidate",
         "INVALID_TOOL_RESULT",

@@ -129,13 +129,28 @@ usage to the root ledger. Missing usage remains reserved. The reference correcti
 select this path in developer view with an operator token. Admission is durable, and runtime
 alarms drive the queued improvement after the browser request returns.
 
+For a capability target whose value is exactly `{ source: string }`, the optional
+`modelCodeEditGenerator(modelFactory, { id, instructions, maxOutputTokens? })` returns a
+`CandidateGenerator` that requests ordered `{ before, after }` edits. Every `before` excerpt
+must match exactly once. The adapter reconstructs the full source without changing the
+baseline; the existing evaluator and executable-change review policy still apply. This is
+an experimental output format, not an established performance improvement. The
+[executable adapter examples](../tests/unit/code-edits.test.ts) cover generation, literal
+replacement semantics and rejection of ambiguous or stale edits.
+
+Generators can call `execution.reportUsage(tokens)` when a provider receipt becomes known,
+before processing a candidate that might fail. The pipeline persists that receipt immediately;
+returning `usedTokens` later is idempotent. Unknown interrupted usage remains reserved.
+Host-enforced model timeouts report `BUDGET_EXCEEDED`; other provider failures report
+`MODEL_FAILED`. Neither means an agent's existing cell or approved configuration changed.
+
 Customer variations are configuration versions. Generated code-package publication,
 state-schema migrations, and infrastructure deployment are not yet implemented.
 
 ## Current limitations
 
-Provider-native compaction, semantic history retrieval, multi-agent message orchestration,
-comparative benchmarks, and live HTTP observation verification remain under implementation.
+Provider-native compaction, semantic history retrieval, broader model-driven delegation,
+representative comparative evidence, and live HTTP observation verification remain incomplete.
 Each browser experiment uses one Durable Object containing
 its synthetic tenant spaces; scaling to thousands of tenants has not been demonstrated.
 

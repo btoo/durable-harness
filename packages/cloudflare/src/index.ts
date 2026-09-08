@@ -9,5 +9,6 @@ export * from "./mcp.js";
 export * from "./step-context.js";
 
 export * from "./proposals.js";
+export * from "./code-edits.js";
 
 export * from "./capabilities.js";

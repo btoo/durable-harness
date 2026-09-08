@@ -14,7 +14,11 @@ import {
   type Principal,
   type RecordStore,
 } from "@durable-harness/core";
-import { canonicalWorkersAI, workersAICandidateGenerator } from "@durable-harness/cloudflare";
+import {
+  canonicalWorkersAI,
+  workersAICandidateGenerator,
+  modelCodeEditGenerator,
+} from "@durable-harness/cloudflare";
 import { corrections, procurementCases, seedTool, toolContract } from "./procurement-cases.js";
 
 const candidateSchema = z.object({ source: z.string().min(1).max(16000) }).strict();
@@ -124,7 +128,15 @@ export class ProgramStudy {
       },
     ]);
   }
-  private pipeline(learning: Learning, stage: 1 | 2) {
+  private pipeline(learning: Learning, stage: 1 | 2, edits = false) {
+    if (edits)
+      return new LearningPipeline(this.store, learning, {
+        ...modelCodeEditGenerator(
+          () => createWorkersAI({ binding: canonicalWorkersAI(this.env.AI) })(this.env.MODEL_ID),
+          { id: "source-edits-v1", instructions: toolContract(stage) },
+        ),
+        maxCandidates: 1,
+      });
     const generator = workersAICandidateGenerator(this.env.AI, this.env.MODEL_ID, {
       version: `program-study-v1-stage-${stage}`,
       candidateSchema,
@@ -240,10 +252,21 @@ export class ProgramStudy {
         this.budgets.pause(rootId);
       }
     }
-    if (input.action === "program-harness") {
+    if (input.action === "program-harness" || input.action === "program-edit") {
       invariant(!sealed, "INVALID_INPUT", "Held-out assessment has already sealed this study.");
       const learning = this.learning(stage);
-      learning.initialize(studyOwner, studySpace, "quote-tool", { source: seedTool });
+      const edits = input.action === "program-edit";
+      invariant(
+        !edits || stage === 2,
+        "INVALID_INPUT",
+        "The bounded edit follow-up targets stage two.",
+      );
+      learning.initialize(
+        studyOwner,
+        studySpace,
+        "quote-tool",
+        edits ? candidateSchema.parse(input.candidate) : { source: seedTool },
+      );
       for (const [index, text] of corrections[stage].entries())
         learning.feedback(studyOwner, {
           id: `stage-${stage}-${index}`,
@@ -254,12 +277,20 @@ export class ProgramStudy {
           sourceRunId: `synthetic-stage-${stage}`,
           lineage: [],
         });
-      const pipeline = this.pipeline(learning, stage);
+      const pipeline = this.pipeline(learning, stage, edits);
+      if (edits)
+        this.budgets.start("edit-supplement", {
+          steps: 1,
+          tokens: 24000,
+          activeMs: 120000,
+          descendants: 1,
+        });
       const run = pipeline.start(studyOwner, {
         id: `harness-program-${stage}`,
         workspaceId: studySpace,
         target: "quote-tool",
         evidenceIds: corrections[stage].map((_, index) => `stage-${stage}-${index}`),
+        ...(edits ? { rootId: "edit-supplement" } : {}),
       });
       let completed = run;
       try {
@@ -267,6 +298,7 @@ export class ProgramStudy {
       } catch {
         completed = pipeline.read(studyOwner, run.id);
       }
+      if (edits) this.budgets.pause(run.rootId);
       const proposal = completed.currentProposalId
         ? learning.read(studyOwner, completed.currentProposalId)
         : undefined;
@@ -286,13 +318,17 @@ export class ProgramStudy {
         "Explicit synthetic reviewer approval is required for executable changes.",
       );
       const learning = this.learning(stage);
-      const run = this.store.get<{ currentProposalId?: string; rootId: string }>(
-        "learning_runs",
-        `harness-program-${stage}`,
-      );
+      const run = this.store.get<{
+        currentProposalId?: string;
+        rootId: string;
+        generatorId: string;
+      }>("learning_runs", `harness-program-${stage}`);
       invariant(run?.currentProposalId, "NOT_FOUND", "No candidate awaits review.");
       const version = await learning.promote(studyOwner, run.currentProposalId, true);
-      await this.pipeline(learning, stage).advance(studyOwner, `harness-program-${stage}`);
+      const edits = run.generatorId === "source-edits-v1";
+      if (edits) this.budgets.resume(run.rootId);
+      await this.pipeline(learning, stage, edits).advance(studyOwner, `harness-program-${stage}`);
+      if (edits) this.budgets.complete(run.rootId);
       return {
         candidate: version.value,
         review: "synthetic automated reviewer; human effort not measured",

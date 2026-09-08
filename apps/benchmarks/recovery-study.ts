@@ -227,7 +227,14 @@ export class RecoveryStudy {
           name: "connector",
           fns: {
             loadOffers: async () => this.loadOffers(),
-            send: async (...args: unknown[]) => this.send(String(args[0]), args[1]),
+            send: async (...args: unknown[]) => {
+              invariant(
+                approved,
+                "APPROVAL_REQUIRED",
+                "The host requires approval before recording a synthetic order.",
+              );
+              return this.send(String(args[0]), args[1]);
+            },
           },
         },
       ],

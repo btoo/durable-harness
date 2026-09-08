@@ -156,3 +156,29 @@ it("counts an interrupted generator attempt and preserves unknown usage before r
   expect(new RunBudgets(store).read(run.rootId).reservedTokens).toBe(100);
   close();
 });
+
+it("retains known model usage when parsing the generated candidate subsequently fails", async () => {
+  const { store, close, learning } = setup();
+  const generator: CandidateGenerator = {
+    id: "known-receipt",
+    origin: "model_generated",
+    reserveTokens: () => 100,
+    generate: async (_context, execution) => {
+      execution.reportUsage?.(50);
+      throw new Error("The generated source edit was ambiguous");
+    },
+  };
+  const pipeline = new LearningPipeline(store, learning, generator);
+  const run = pipeline.start(buyerA, {
+    workspaceId: "a",
+    target: "preferences",
+    evidenceIds: ["feedback"],
+  });
+  await expect(pipeline.advance(buyerA, run.id)).rejects.toThrow("ambiguous");
+  expect(new RunBudgets(store).read(run.rootId)).toMatchObject({
+    usedTokens: 50,
+    reservedTokens: 0,
+  });
+  expect(learning.configuration(buyerA, "a", "preferences")?.value).toBe(false);
+  close();
+});

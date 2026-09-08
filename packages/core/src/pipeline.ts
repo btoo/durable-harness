@@ -27,7 +27,13 @@ export interface CandidateGenerator {
   reserveTokens(context: CandidateContext): number;
   generate(
     context: CandidateContext,
-    execution: { id: string; reservedTokens: number; signal: AbortSignal },
+    execution: {
+      id: string;
+      reservedTokens: number;
+      signal: AbortSignal;
+      /** Persist a known provider receipt even if later candidate parsing fails. */
+      reportUsage?: (tokens: number) => void;
+    },
   ): Promise<{ candidate: unknown; rationale: string; usedTokens?: number }>;
 }
 export interface LearningRun {
@@ -214,6 +220,12 @@ export class LearningPipeline {
             id: executionId,
             reservedTokens,
             signal: AbortSignal.timeout(Math.max(1, this.budgets.remainingActiveMs(run.rootId))),
+            ...(reservedTokens > 0
+              ? {
+                  reportUsage: (tokens: number) =>
+                    this.budgets.settle(run.rootId, executionId, tokens),
+                }
+              : {}),
           });
           if (reservedTokens > 0 && generated.usedTokens !== undefined)
             this.budgets.settle(run.rootId, executionId, generated.usedTokens);

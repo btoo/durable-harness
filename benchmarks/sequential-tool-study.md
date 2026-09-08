@@ -54,6 +54,15 @@ It verifies process-loss recovery, not failure of an independent provider or sto
 The model does not participate in the recovery phase. This isolates runtime behavior but
 does not measure autonomous recovery planning or developer integration time.
 
+## Bounded edit follow-up
+
+After the two corrected pairs, allow one fresh model step on the first harness trial's
+approved stage-1 tool: 24,000 tokens and 120 seconds, with the same model, reasoning default,
+contract, adaptation data, evaluator and review requirement. Request exact source edits
+instead of the entire program. This is a supplemental attempt, not another matched pair;
+any success cannot establish that the edit format caused an improvement over another retry.
+The completed baseline comparison remains frozen.
+
 ## Reproduce
 
 ```sh

@@ -118,6 +118,27 @@ for (const mode of ["harness", "filesystem"] as const) {
     expect((await call({ action: "recovery-run", approved: true })).status).toBe(400);
   });
 }
+
+it("enforces filesystem-comparator approval at the host even when generated code bypasses its wrapper", async () => {
+  const namespace = (env as unknown as { BENCHMARKS: DurableObjectNamespace }).BENCHMARKS;
+  const name = crypto.randomUUID();
+  const call = (body: unknown) =>
+    namespace
+      .getByName(name)
+      .fetch("https://benchmark.test/run", { method: "POST", body: JSON.stringify(body) });
+  await call({
+    action: "recovery-setup",
+    mode: "filesystem",
+    candidate: {
+      source: 'async function rankOffers() { return await connector.send("bypass",{}); }',
+    },
+  });
+  await call({ action: "recovery-run" }).catch(() => undefined);
+  const status = (await (await call({ action: "recovery-status" })).json()) as {
+    counts: { effects: number };
+  };
+  expect(status.counts.effects).toBe(0);
+});
 it("evaluates the stock Codemode filesystem baseline through its real state provider", async () => {
   const benchmark = (env as unknown as { BENCHMARKS: DurableObjectNamespace }).BENCHMARKS.getByName(
     crypto.randomUUID(),

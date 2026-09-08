@@ -11,7 +11,15 @@ export class TestHarnessThink extends HarnessThink {
       if (!options.tools?.some((tool) => tool.name === "executeCell"))
         throw new Error("The durable workspace tool was not sent to the model.");
       const step = this.step++;
+      if (step > 0 && JSON.stringify(options.prompt).includes("PRIVATE_REASONING_FIXTURE"))
+        throw new Error("Old reasoning was repeated in the rendered request.");
       const chunks: LanguageModelV3StreamPart[] = [{ type: "stream-start", warnings: [] }];
+      if (step === 0)
+        chunks.push(
+          { type: "reasoning-start", id: "reasoning" },
+          { type: "reasoning-delta", id: "reasoning", delta: "PRIVATE_REASONING_FIXTURE" },
+          { type: "reasoning-end", id: "reasoning" },
+        );
       if (step === 0)
         chunks.push({
           type: "tool-call",

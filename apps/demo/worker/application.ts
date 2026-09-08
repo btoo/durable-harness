@@ -299,6 +299,25 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.seed();
     const principal = principalFor(persona);
     this.workspace.access.require(principal, workspaceId, "write");
+    if (command.action === "read-model-step") {
+      invariant(
+        persona === "developer",
+        "ACCESS_DENIED",
+        "Original model messages require developer access.",
+      );
+      const request = this.records.get<ModelRequest>("model_requests", command.rootId);
+      invariant(
+        request?.workspaceId === workspaceId,
+        "NOT_FOUND",
+        "No model run belongs to this workspace with that identity.",
+      );
+      this.workspace.snapshot(principal, workspaceId);
+      const agent = await getAgentByName(
+        this.env.MODEL_AGENTS,
+        `${request.sandbox}:${workspaceId}:${request.principalId}`,
+      );
+      return agent.originalStep(command.rootId, command.stepId, command.offset, command.length);
+    }
     if (command.action === "mcp-add") {
       invariant(
         transportOrigin,

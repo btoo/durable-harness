@@ -64,6 +64,12 @@ Capturing a mutable top-level `freight` binding fails with `UNSUPPORTED_CAPTURE`
 guidance to pass the value as an argument. Helper dependency versions remain pinned
 when another cell replaces an implementation.
 
+`workspace.readHelper(principal, workspaceId, name)` returns its pinned source and dependencies.
+`inspectGraph(workspace.readBinding(...))` provides readable JSON for ordinary trees and
+retains graph notation when aliases, cycles, or special values matter. Clocks and randomness
+remain journaled even when code aliases built-in objects. Dynamic imports, ambient globals,
+runtime internals, and implicit `this` captures are outside the supported cell language.
+
 ## External actions and recovery
 
 A `ToolDefinition` declares `effect: "read" | "idempotent" | "external"`, JSON schemas,
@@ -144,3 +150,8 @@ Text batches enter a durable outbox before publication and are deduplicated in t
 application event log. A runtime alarm cancels submissions that exceed active-time limits.
 The real-model form requires the deployment's operator token; synthetic identity switching
 does not authorize paid inference.
+
+Original provider messages from new runs are archived before repeated reasoning is removed
+from subsequent requests. Developers can use the `read-model-step` command with `rootId`,
+`stepId`, and optional `offset`/`length` for bounded reads (16,000 characters by default;
+64,000 maximum). Customer sessions cannot read those internal provider messages.

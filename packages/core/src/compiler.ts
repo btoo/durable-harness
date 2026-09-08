@@ -133,6 +133,16 @@ export async function compileCell(
     ReferencedIdentifier(path) {
       if (path.findParent((parent) => parent.isTSType())) return;
       const name = path.node.name;
+      invariant(
+        !name.startsWith("__dh") &&
+          (path.scope.hasBinding(name) ||
+            globals.has(name) ||
+            runtimeNames.has(name) ||
+            dataNames.has(name) ||
+            functionNames.has(name)),
+        "INVALID_CELL",
+        `${name} is not in the durable namespace. Use the namespace index and declared cell capabilities.`,
+      );
       if (
         [
           "fetch",
@@ -166,6 +176,18 @@ export async function compileCell(
             `Helper ${helperName} captures ${name}. Pass that value as an argument; retained functions cannot capture mutable workspace data.`,
           );
       }
+    },
+    ImportExpression() {
+      throw new HarnessFault(
+        "INVALID_CELL",
+        "Dynamic imports are not cell capabilities. Discover an installed tool or declare a supported helper module.",
+      );
+    },
+    ThisExpression() {
+      throw new HarnessFault(
+        "INVALID_CELL",
+        "Cells and retained helpers cannot capture this. Pass explicit data and use declared capabilities.",
+      );
     },
     MemberExpression(path) {
       const node = path.node;
@@ -252,6 +274,7 @@ export async function compileCell(
     .join("\n");
   const names = [...dataNames].sort();
   const code = `async () => {
+    (${hardenCellGlobals.toString()})();
     const __dhDecode = ${decodeGraph.toString()};
     const __dhEncode = ${encodeGraph.toString()};
     const __dhRoots = __dhDecode(${JSON.stringify(starting.graph)});
@@ -267,4 +290,59 @@ export async function compileCell(
     return { graph: __dhEncode({${names.map((name) => `${JSON.stringify(name)}:${name}`).join(",")}}) };
   }`;
   return { code, functions: modules, modules: archive, names };
+}
+
+/** Runs inside the isolated code worker; aliases cannot recover ambient clocks or code constructors. */
+function hardenCellGlobals() {
+  if (Object.hasOwn(globalThis, "__dhHardened")) return;
+  const unavailable = () => {
+    throw new Error(
+      "Use journaled runtime.now(), runtime.random(), and explicit helper modules; ambient time and dynamic code generation are unavailable.",
+    );
+  };
+  const nativeDate = globalThis.Date;
+  Object.defineProperty(nativeDate, "now", {
+    value: unavailable,
+    writable: false,
+    configurable: false,
+  });
+  const date = new Proxy(nativeDate, {
+    apply: unavailable,
+    construct(target, args, newTarget) {
+      if (!args.length) unavailable();
+      return Reflect.construct(target, args, newTarget);
+    },
+  });
+  Object.defineProperty(nativeDate.prototype, "constructor", {
+    value: date,
+    writable: false,
+    configurable: false,
+  });
+  Object.freeze(nativeDate.prototype);
+  Object.freeze(nativeDate);
+  Object.defineProperty(globalThis, "Date", { value: date, writable: false, configurable: false });
+  Object.defineProperty(Math, "random", {
+    value: unavailable,
+    writable: false,
+    configurable: false,
+  });
+  Object.freeze(Math);
+  for (const prototype of [
+    Function.prototype,
+    Object.getPrototypeOf(async () => {}),
+    Object.getPrototypeOf(function* () {}),
+    Object.getPrototypeOf(async function* () {}),
+  ]) {
+    Object.defineProperty(prototype, "constructor", {
+      value: unavailable,
+      writable: false,
+      configurable: false,
+    });
+    Object.freeze(prototype);
+  }
+  Object.defineProperty(globalThis, "__dhHardened", {
+    value: true,
+    writable: false,
+    configurable: false,
+  });
 }

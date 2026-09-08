@@ -22,6 +22,20 @@ const testEnv = env as unknown as { WORKSPACES: DurableObjectNamespace };
 const host = () => testEnv.WORKSPACES.getByName(crypto.randomUUID()) as TestHost;
 
 describe("code cells in real Dynamic Workers and Durable Object storage", () => {
+  it("rejects aliased clocks, random sources, dynamic imports, and runtime internals", async () => {
+    for (const source of [
+      "let timestamp; { const Clock = Date; timestamp = new Clock().toISOString(); }",
+      "let value; { const math = Math; value = math.random(); }",
+      "const now = Object.getPrototypeOf(new Date(0)).constructor.now();",
+      "let value; { const clock = Object.getPrototypeOf(new Date(0)).constructor; value = new clock().toISOString(); }",
+      'let value; { const module = await import("node:crypto"); value = module.randomUUID(); }',
+      "const internals = this;",
+      "const internals = __dhRoots;",
+    ]) {
+      const result = await host().run(source);
+      expect(result.ok, source).toBe(false);
+    }
+  });
   it("resumes preflight authorization without treating a dispatched write as safe to repeat", async () => {
     const workspace = host();
     const id = crypto.randomUUID();

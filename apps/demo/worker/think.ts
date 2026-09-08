@@ -121,18 +121,30 @@ export class HarnessThink extends Think<DemoEnv> {
     this.mirroredFields = 0;
     const request = await this.request();
     const stepId = `${request.rootId}:${this.attempt}:${context.stepNumber}`;
+    // Think retains original messages. Repeated private reasoning is not needed in the
+    // next request; preserve text, tool calls, and their exact settled results.
+    const messages = context.messages.flatMap((message) => {
+      if (message.role !== "assistant" || typeof message.content === "string") return [message];
+      const content = message.content.filter((part) => part.type !== "reasoning");
+      return content.length ? [{ ...message, content }] : [];
+    });
     // Reserve conservatively from the complete UTF-8 input plus the full output allowance.
     const estimate =
-      new TextEncoder().encode(JSON.stringify(context.messages)).byteLength +
+      new TextEncoder().encode(JSON.stringify(messages)).byteLength +
       this.inputOverhead +
       this.responseTokenLimit;
     await (await this.application()).modelReserve(request.rootId, stepId, estimate);
     await this.ctx.storage.put(`budget-step:${request.rootId}`, stepId);
-    return { activeTools: ["inspectWorkspace", "executeCell"] };
+    return { messages, activeTools: ["inspectWorkspace", "executeCell"] };
   }
   async onStepEnd(context: StepContext) {
     const request = await this.request();
     const stepId = await this.ctx.storage.get<string>(`budget-step:${request.rootId}`);
+    if (stepId)
+      await this.ctx.storage.put(
+        `original-step:${stepId}`,
+        JSON.stringify(context.response.messages),
+      );
     if (stepId && context.usage.totalTokens !== undefined)
       await (
         await this.application()
@@ -158,6 +170,30 @@ export class HarnessThink extends Think<DemoEnv> {
           .filter((part) => part.type === "tool-error")
           .map((part) => ({ name: part.toolName, error: String(part.error) })),
       });
+  }
+  async originalStep(rootId: string, stepId: string, offset = 0, length = 16_000) {
+    invariant(
+      stepId.startsWith(`${rootId}:`) && (await this.ctx.storage.get(`request:${rootId}`)),
+      "NOT_FOUND",
+      "No original step belongs to this run.",
+    );
+    invariant(
+      Number.isSafeInteger(offset) &&
+        offset >= 0 &&
+        Number.isSafeInteger(length) &&
+        length > 0 &&
+        length <= 64_000,
+      "INVALID_INPUT",
+      "Use a nonnegative offset and a read length of 1–64,000 characters.",
+    );
+    const original = await this.ctx.storage.get<string>(`original-step:${stepId}`);
+    invariant(original !== undefined, "NOT_FOUND", "This step has no recorded original message.");
+    return {
+      text: original.slice(offset, offset + length),
+      offset,
+      totalCharacters: original.length,
+      truncated: offset + length < original.length,
+    };
   }
   async run(request: ModelRequest) {
     const previous = await this.ctx.storage.get<ModelRequest>(`request:${request.rootId}`);

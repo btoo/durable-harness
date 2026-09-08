@@ -237,6 +237,20 @@ describe("authenticated reference application", () => {
     ).toBe(true);
     expect(snapshot.runs?.[0]?.steps).toBe(4);
     expect(snapshot.runs).toHaveLength(1);
+    const stepId = snapshot.modelSteps![0]!.stepId;
+    const original = await command(cookie, {
+      action: "read-model-step",
+      rootId: requestId,
+      stepId,
+    });
+    expect(((await original.json()) as { text: string }).text).toContain(
+      "PRIVATE_REASONING_FIXTURE",
+    );
+    const customerCookie = await session("northstar", cookie);
+    expect(
+      (await command(customerCookie, { action: "read-model-step", rootId: requestId, stepId }))
+        .status,
+    ).toBe(403);
     const streamed = snapshot.events
       .filter((event) => event.kind === "model.delta")
       .map((event) => event.text)

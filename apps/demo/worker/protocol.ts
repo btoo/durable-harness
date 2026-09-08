@@ -47,6 +47,13 @@ export const personaSchema = z.enum(["northstar", "cedar", "developer"]);
 export type Persona = z.infer<typeof personaSchema>;
 export const commandSchema = z.discriminatedUnion("action", [
   z.object({
+    action: z.literal("read-model-step"),
+    rootId: z.string().uuid(),
+    stepId: z.string().min(1).max(200),
+    offset: z.number().int().nonnegative().optional(),
+    length: z.number().int().min(1).max(64_000).optional(),
+  }),
+  z.object({
     action: z.literal("mcp-add"),
     name: z.string().min(1).max(80),
     url: z.string().url().max(2000),

@@ -396,6 +396,27 @@ export function App() {
                       </button>
                     </div>
                   </section>
+                  {lastCell?.status === "waiting_connection" ? (
+                    <section className="panel approval">
+                      <h2>Reconnect to continue</h2>
+                      <p>
+                        Progress is saved. Restore the account in Connections, then resume this
+                        task.
+                      </p>
+                      <div className="button-row">
+                        <button className="secondary" onClick={() => setView("connections")}>
+                          Open connections
+                        </button>
+                        <button
+                          className="primary"
+                          disabled={busy}
+                          onClick={() => void perform({ action: "resume", cellId: lastCell.id })}
+                        >
+                          Resume saved work
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
                   {developer && data ? (
                     <ModelRun data={data} busy={busy} perform={perform} />
                   ) : null}

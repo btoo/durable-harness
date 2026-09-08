@@ -23,7 +23,7 @@ export class McpTestHost extends DurableObject<{ CREDENTIAL_KEY: string }> {
   private readonly lifecycle = new Lifecycle(this).use(this.manager);
   private readonly transport = new CloudflareMcpTransport(this.manager, {
     start: () => this.lifecycle.start(),
-    callbackUrl: (id) => `https://fixture.example.test/callback/${id}`,
+    callbackUrl: (id) => `https://fixture.example.test/api/mcp/callback/${id}`,
     authProvider: (callback) => this.provider(callback),
   });
   private readonly connections = new Connections(
@@ -61,6 +61,13 @@ export class McpTestHost extends DurableObject<{ CREDENTIAL_KEY: string }> {
   }
   async close() {
     await this.manager.closeAllConnections();
+  }
+  async tryCall() {
+    try {
+      return { ok: true, value: await this.call() };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
   }
   async authorize(url: string) {
     const id = this.store.get<string>("metadata", "connection")!;

@@ -25,6 +25,7 @@ export default {
           status: "ok",
           evidence: "synthetic",
           version: "0.1.0-experimental",
+          deployment: env.CF_VERSION_METADATA ?? null,
         });
       const existing = await readSession(request, env.SESSION_SECRET);
       if (url.pathname === "/api/session" && request.method === "POST") {

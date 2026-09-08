@@ -83,7 +83,7 @@ undo an external action.
 | `RunBudgets`                                                  | Account for steps, tokens, active time, and descendant admissions |
 | `Connections`                                                 | Track ownership, grants, refresh, and reconnection                |
 
-See the [API guide](docs/api.md), [deployment guide](docs/deployment.md), and
+See the [API guide](docs/api.md) · [MCP connections](docs/mcp.md), [deployment guide](docs/deployment.md), and
 [implementation ledger](docs/implementation.md). Packages currently export workspace
 source; npm publication is not yet available.
 

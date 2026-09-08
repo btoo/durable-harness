@@ -15,6 +15,7 @@ export interface DemoEnv {
   DEMO_MODE: string;
   MODEL_ID: string;
   MCP_ALLOWED_ORIGINS?: string;
+  CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
 }
 // Workers' RPC mapper cannot infer values that intentionally contain unknown data graphs.
 // Keep the concrete public method contract while letting the transport serialize values.

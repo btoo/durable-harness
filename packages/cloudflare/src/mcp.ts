@@ -75,6 +75,11 @@ export class CloudflareMcpTransport implements McpTransport {
       const discovered = await this.manager.discoverIfConnected(connection.id, {
         timeoutMs: 15_000,
       });
+      if (!discovered?.success && discovered?.state === "authenticating") {
+        const reauthorization = await this.manager.connectToServer(connection.id);
+        if (reauthorization.state === "authenticating")
+          return { authorizationUrl: reauthorization.authUrl };
+      }
       invariant(
         discovered?.success,
         "RECONNECTION_REQUIRED",
@@ -85,7 +90,9 @@ export class CloudflareMcpTransport implements McpTransport {
       return {
         tools: this.catalog(connection.id),
         backgroundAccess:
-          connection.auth === "none" || tokens?.refresh_token
+          connection.auth === "none" ||
+          tokens?.refresh_token ||
+          (connection.auth === "bearer" && credentials?.expiresAt === undefined)
             ? ("supported" as const)
             : ("until_expiry" as const),
         scopes: tokens?.scope?.split(/\s+/).filter(Boolean) ?? [],

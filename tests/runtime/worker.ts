@@ -195,3 +195,5 @@ export default {
       : new Response("Test worker");
   },
 };
+
+export { SyntheticCatalog } from "../../apps/mcp-fixture/worker.js";

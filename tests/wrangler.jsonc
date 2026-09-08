@@ -9,6 +9,7 @@
       { "name": "APPLICATIONS", "class_name": "DemoApplication" },
       { "name": "MODEL_AGENTS", "class_name": "TestHarnessThink" },
       { "name": "MCP_TESTS", "class_name": "McpTestHost" },
+      { "name": "CATALOG", "class_name": "SyntheticCatalog" },
     ],
   },
   "migrations": [
@@ -19,6 +20,7 @@
         "DemoApplication",
         "TestHarnessThink",
         "McpTestHost",
+        "SyntheticCatalog",
       ],
     },
   ],
@@ -31,5 +33,7 @@
     "MODEL_ID": "synthetic",
     "ADMIN_TOKEN": "test-only-model-admission",
     "MCP_ALLOWED_ORIGINS": "https://fixture.example.test",
+    "CALLBACK_ORIGINS": "https://fixture.example.test",
+    "TEST_CONTROL_TOKEN": "test-only-fixture-control",
   },
 }

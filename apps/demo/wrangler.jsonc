@@ -19,7 +19,12 @@
   "worker_loaders": [{ "binding": "LOADER" }],
   "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "durable-harness-artifacts" }],
   "ai": { "binding": "AI" },
-  "vars": { "DEMO_MODE": "synthetic", "MODEL_ID": "@cf/zai-org/glm-5.3-flash" },
+  "vars": {
+    "DEMO_MODE": "synthetic",
+    "MODEL_ID": "@cf/zai-org/glm-5.3-flash",
+    "MCP_ALLOWED_ORIGINS": "https://durable-harness-mcp-fixture.btjk138.workers.dev",
+  },
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "limits": { "cpu_ms": 30000 },
   "observability": { "enabled": false },
 }

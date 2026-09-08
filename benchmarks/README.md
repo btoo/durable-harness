@@ -1,5 +1,10 @@
 # Synthetic comparison
 
+The newer [sequential tool and recovery study](sequential-tool-study.md) tests
+generated executable capabilities, sequential corrections, held-out cases and actor
+interruption. It uses GEPA's built-in reflective proposer. Start there for the current
+comparison; the original configuration study below is retained for provenance.
+
 This experiment compares learning disabled, the durable-harness learning pipeline,
 and stock Cloudflare Codemode/Shell filesystem execution with GEPA 0.1.4 selection.
 It uses the same model, bounded candidate generator, corrections, evaluation logic,

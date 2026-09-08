@@ -1,4 +1,6 @@
 import { compareContext } from "./context.js";
+import { ProgramStudy } from "./program-study.js";
+import { RecoveryStudy } from "./recovery-study.js";
 import { z } from "zod";
 import { DurableObject } from "cloudflare:workers";
 import { Workspace } from "@cloudflare/shell";
@@ -61,6 +63,7 @@ function benchmarkTarget() {
 }
 
 export class BenchmarkRun extends DurableObject<Env> {
+  private readonly incarnation = crypto.randomUUID();
   private readonly records = durableStore(this.ctx);
   private readonly files = new Workspace({
     sql: this.ctx.storage.sql,
@@ -126,7 +129,31 @@ export class BenchmarkRun extends DurableObject<Env> {
         candidate?: Preferences;
         caseIds?: string[];
         strategy?: "extractive" | "generic-summary" | "recent-window";
+        mode?: "harness" | "filesystem";
+        approved?: boolean;
       };
+      if (input.action.startsWith("recovery-")) {
+        new ProgramStudy(this.records, this.env);
+        const recovery = new RecoveryStudy(
+          this.records,
+          this.ctx,
+          this.env.LOADER,
+          this.incarnation,
+        );
+        const result =
+          input.action === "recovery-setup"
+            ? await recovery.setup(input.mode!, input.candidate as unknown as { source: string })
+            : input.action === "recovery-run"
+              ? await recovery.run(input.approved === true)
+              : input.action === "recovery-revoke"
+                ? recovery.revoke()
+                : recovery.status();
+        return Response.json(modelData(result));
+      }
+      if (input.action.startsWith("program-"))
+        return Response.json(
+          modelData(await new ProgramStudy(this.records, this.env).handle(input)),
+        );
       if (input.action === "context")
         return Response.json(
           await compareContext(

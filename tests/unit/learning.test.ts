@@ -151,3 +151,16 @@ describe("measured configuration promotion", () => {
     await expect(learning.promote(buyerA, other.id)).rejects.toThrow(/target changed/);
   });
 });
+it("keeps held-out assessment separate from refinement and returns no held-out answers", async () => {
+  const { learning, proposal } = setup();
+  await learning.evaluate(buyerA, proposal.id);
+  await expect(learning.assess(dev, proposal.id)).rejects.toThrow("promoted");
+  await learning.promote(buyerA, proposal.id);
+  await expect(learning.assess(buyerA, proposal.id)).rejects.toThrow("developer");
+  const assessment = await learning.assess(dev, proposal.id);
+  expect(assessment).toMatchObject({ cases: 1, passed: 1, meanScore: 1 });
+  expect(JSON.stringify(assessment)).not.toContain("unseen");
+  expect(JSON.stringify(learning.candidateContext(dev, "a", proposal.target))).not.toContain(
+    "sealed-pack",
+  );
+});

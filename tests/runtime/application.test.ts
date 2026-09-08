@@ -25,6 +25,64 @@ async function command(cookie: string, body: object, workspace = "northstar-quot
 }
 
 describe("authenticated reference application", () => {
+  it("separates private notes from reviewed shared copies and applies current workspace grants", async () => {
+    const cookie = await session("northstar");
+    const saved = await command(cookie, {
+      action: "save-memory",
+      title: "Receiving hours",
+      text: "Tuesday receiving window",
+    });
+    expect(saved.status).toBe(200);
+    const note = (await saved.json()) as { id: string };
+    expect((await command(cookie, { action: "publish-memory", id: note.id })).status).toBe(403);
+    const cedar = await session("cedar", cookie);
+    expect((await state(cedar, "cedar-quoting")).sharedMemories).toHaveLength(0);
+    const developer = await session("developer", cedar);
+    expect((await command(developer, { action: "publish-memory", id: note.id })).status).toBe(200);
+    const shared = await state(await session("cedar", developer), "cedar-quoting");
+    expect(shared.sharedMemories[0]?.value).toBe("Tuesday receiving window");
+    const admin = await session("developer", cedar);
+    const current = await state(admin);
+    const revision = current.knowledgeSpaces.find(
+      (space) => space.id === "northstar-quoting",
+    )!.revision;
+    expect(
+      (
+        await command(admin, {
+          action: "set-customer-access",
+          principalId: "northstar",
+          permissions: [],
+          expectedRevision: revision,
+        })
+      ).status,
+    ).toBe(200);
+    const revoked = await session("northstar", admin);
+    const response = await SELF.fetch("https://demo.test/api/state?workspace=northstar-quoting", {
+      headers: { cookie: revoked },
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it("keeps a tested schema proposal under review and protects held-out assessment", async () => {
+    const cookie = await session("developer");
+    const response = await command(cookie, { action: "propose-schema" });
+    expect(response.status).toBe(200);
+    const proposal = (await response.json()) as { status: string; kind: string };
+    expect(proposal).toMatchObject({ status: "awaiting_review", kind: "schema" });
+    await command(cookie, {
+      action: "correct",
+      preference: "includeFreight",
+      text: "Include freight.",
+    });
+    const learned = (await state(cookie)).proposals.find((value) => value.status === "promoted")!;
+    const assessed = await command(cookie, { action: "assess-proposal", id: learned.id });
+    expect(assessed.status).toBe(200);
+    const customerCookie = await session("northstar", cookie);
+    expect(
+      (await command(customerCookie, { action: "assess-proposal", id: learned.id })).status,
+    ).toBe(403);
+  });
+
   it("shares reviewed code while keeping customer-specific preferences private", async () => {
     const cookie = await session("developer");
     await command(cookie, { action: "run-synthetic" });

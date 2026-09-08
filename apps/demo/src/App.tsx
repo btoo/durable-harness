@@ -29,6 +29,7 @@ import {
   type DemoState,
   type Persona,
 } from "./api.js";
+import { Knowledge } from "./Knowledge.js";
 import { Capabilities } from "./Capabilities.js";
 import { Connections } from "./Connections.js";
 import { ModelRun } from "./ModelRun.js";
@@ -36,7 +37,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { HarnessEvent } from "@durable-harness/core";
 
-type View = "activity" | "workspace" | "learning" | "connections" | "capabilities";
+type View = "activity" | "workspace" | "learning" | "connections" | "capabilities" | "knowledge";
 const time = (value: string) =>
   new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(
     new Date(value),
@@ -118,7 +119,13 @@ export function App() {
         )
           void load(workspaceId).catch((error) => setError(String(error)));
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        if (!disposed && event.code === 1008) {
+          generation.current++;
+          setData(undefined);
+          void load(workspaceId).catch((error) => setError(String(error)));
+          return;
+        }
         if (!disposed) {
           setConnection("Reconnecting");
           retry = setTimeout(connect, Math.min(500 * 2 ** attempts++, 5000));
@@ -338,6 +345,14 @@ export function App() {
               <Code2 size={16} />
               Capabilities
             </button>
+            <button
+              role="tab"
+              aria-selected={view === "knowledge"}
+              onClick={() => setView("knowledge")}
+            >
+              <Database size={16} />
+              Knowledge
+            </button>
           </div>
           {error ? (
             <div className="error-banner" role="alert">
@@ -482,6 +497,13 @@ export function App() {
                 </>
               ) : view === "workspace" && developer && data ? (
                 <Workspace data={data} busy={busy} perform={(value) => void perform(value)} />
+              ) : view === "knowledge" && data ? (
+                <Knowledge
+                  key={`${data.persona}:${data.selected}`}
+                  data={data}
+                  busy={busy}
+                  perform={perform}
+                />
               ) : view === "capabilities" && data ? (
                 <Capabilities
                   key={`${data.persona}:${data.selected}`}
@@ -916,6 +938,24 @@ function Learning({
 }) {
   return (
     <>
+      {data.persona === "developer" ? (
+        <section className="panel">
+          <div className="panel-heading">
+            <h2>Developer changes</h2>
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => void perform({ action: "propose-schema" })}
+            >
+              Propose schema extension
+            </button>
+          </div>
+          <p className="caption">
+            This synthetic exercise proposes an optional time-zone field. Schema changes remain
+            under review and are not automatically applied.
+          </p>
+        </section>
+      ) : null}
       {data.learningRuns.length ? (
         <section className="panel">
           <div className="panel-heading">
@@ -973,6 +1013,25 @@ function Learning({
                 <span className="status-pill">{proposal.status.replaceAll("_", " ")}</span>
               </div>
               <p>{proposal.rationale}</p>
+              {data.persona === "developer" && proposal.status === "promoted" ? (
+                <div className="button-row">
+                  <button
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => void perform({ action: "assess-proposal", id: proposal.id })}
+                  >
+                    Assess held-out cases
+                  </button>
+                  {data.assessments
+                    .filter((assessment) => assessment.proposalId === proposal.id)
+                    .map((assessment) => (
+                      <span className="caption" key={assessment.id}>
+                        {assessment.passed}/{assessment.cases} held-out cases passed
+                      </span>
+                    ))}
+                </div>
+              ) : null}
+
               <div className="proposal-evidence">
                 <FileText size={14} />
                 {proposal.evidenceIds.length} correction cited <span>·</span>
@@ -1010,7 +1069,9 @@ function Learning({
           <div className="cluster" key={cluster.id}>
             <span className="count">{cluster.signals.length}</span>
             <div>
-              <strong>{cluster.kind}</strong>
+              <strong>
+                {cluster.kind} · {cluster.confirmed ? "confirmed" : "unclassified"}
+              </strong>
               <p>{cluster.signals[0]?.text}</p>
             </div>
           </div>

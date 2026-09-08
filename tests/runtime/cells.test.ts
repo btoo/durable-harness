@@ -23,6 +23,19 @@ const testEnv = env as unknown as { WORKSPACES: DurableObjectNamespace };
 const host = () => testEnv.WORKSPACES.getByName(crypto.randomUUID()) as TestHost;
 
 describe("code cells in real Dynamic Workers and Durable Object storage", () => {
+  it("recovers an actual mid-cell actor crash without repeating a completed external effect", async () => {
+    const name = crypto.randomUUID();
+    const first = testEnv.WORKSPACES.getByName(name) as TestHost;
+    const id = crypto.randomUUID();
+    const source = 'const receipt = await tools.call("crash-after-send", {});';
+    await first.run(source, id).catch(() => undefined);
+    const restored = testEnv.WORKSPACES.getByName(name) as TestHost;
+    const recovered = await restored.run(source, id);
+    expect(recovered.ok, JSON.stringify(recovered)).toBe(true);
+    if (recovered.ok) expect(recovered.values.receipt).toEqual({ delivered: true });
+    expect((await restored.counts()).sends).toBe(1);
+  });
+
   it("returns the final expression and snapshots bounded console output", async () => {
     const workspace = host();
     const result = await workspace.run(

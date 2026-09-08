@@ -11,6 +11,7 @@
       { "name": "SUPPLIER_AGENTS", "class_name": "SupplierAgent" },
       { "name": "MCP_TESTS", "class_name": "McpTestHost" },
       { "name": "CATALOG", "class_name": "SyntheticCatalog" },
+      { "name": "BENCHMARKS", "class_name": "BenchmarkRun" },
     ],
   },
   "migrations": [
@@ -23,6 +24,7 @@
         "SupplierAgent",
         "McpTestHost",
         "SyntheticCatalog",
+        "BenchmarkRun",
       ],
     },
   ],

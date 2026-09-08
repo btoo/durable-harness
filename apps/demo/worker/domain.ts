@@ -1,3 +1,4 @@
+import { Validator } from "@cfworker/json-schema";
 import {
   invariant,
   Learning,
@@ -352,4 +353,73 @@ export function capabilityProtocols(): import("@durable-harness/core").Capabilit
         expected,
     },
   ];
+}
+
+export const initialPreferenceSchema = {
+  type: "object",
+  properties: {
+    includeFreight: { type: "boolean" },
+    businessDaysOnly: { type: "boolean" },
+    approvalRequired: { const: true },
+  },
+  required: ["includeFreight", "businessDaysOnly", "approvalRequired"],
+  additionalProperties: false,
+};
+export function preferenceSchemaTarget(): LearningTarget {
+  return {
+    name: "preference-schema",
+    kind: "schema",
+    validate(candidate) {
+      const schema = candidate as typeof initialPreferenceSchema;
+      invariant(
+        schema?.type === "object" &&
+          schema.additionalProperties === false &&
+          schema.properties?.approvalRequired?.const === true,
+        "INVALID_INPUT",
+        "A schema proposal must preserve the approval boundary and explicit properties.",
+      );
+    },
+    evaluator: {
+      id: "preference-schema-v1",
+      async evaluate({ configuration, testCase }) {
+        const valid = new Validator(configuration as Record<string, unknown>).validate(
+          testCase.input,
+        ).valid;
+        const passed = valid === testCase.expected;
+        return {
+          caseId: testCase.id,
+          passed,
+          score: Number(passed),
+          explanation: passed
+            ? "The schema preserves the required contract."
+            : "This example does not satisfy the expected schema behavior.",
+        };
+      },
+    },
+    cases: [
+      {
+        id: "existing-records",
+        family: "legacy-schema",
+        split: "validation",
+        input: initialPreferences,
+        expected: true,
+        critical: true,
+      },
+      {
+        id: "time-zone-field",
+        family: "time-zone-schema",
+        split: "validation",
+        input: { ...initialPreferences, timeZone: "UTC" },
+        expected: true,
+      },
+      {
+        id: "approval-remains-required",
+        family: "approval-schema",
+        split: "validation",
+        input: { ...initialPreferences, approvalRequired: false },
+        expected: false,
+        critical: true,
+      },
+    ],
+  };
 }

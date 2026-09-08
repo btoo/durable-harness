@@ -15,6 +15,7 @@ import {
   Learning,
   LearningPipeline,
   type LearningRun,
+  type HeldoutAssessment,
   Memory,
   RunBudgets,
   asFault,
@@ -49,6 +50,8 @@ import {
   initialPreferences,
   operator,
   preferencesTarget,
+  preferenceSchemaTarget,
+  initialPreferenceSchema,
   scenarioSource,
   workspaces,
   type ProcurementPreferences,
@@ -99,7 +102,10 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     capabilityProtocols(),
   );
   private readonly memory = new Memory(this.records);
-  private readonly learning = new Learning(this.records, [preferencesTarget()]);
+  private readonly learning = new Learning(this.records, [
+    preferencesTarget(),
+    preferenceSchemaTarget(),
+  ]);
   private readonly pipeline = new LearningPipeline(this.records, this.learning, {
     id: "synthetic-preference-projection-v1",
     origin: "customer_correction",
@@ -185,6 +191,16 @@ export class DemoApplication extends DurableObject<DemoEnv> {
           { principalId: "cedar", permissions: ["read", "execute"] },
         ],
       } satisfies KnowledgeSpace);
+    if (this.records.get("metadata", "seeded") && !this.records.get("metadata", "schema-seeded")) {
+      for (const workspace of workspaces)
+        this.learning.initialize(
+          operator,
+          workspace.id,
+          "preference-schema",
+          initialPreferenceSchema,
+        );
+      this.records.put("metadata", "schema-seeded", true);
+    }
     if (this.records.get("metadata", "seeded")) return;
     this.records.transaction(() => {
       for (const workspace of workspaces) {
@@ -202,6 +218,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         };
         this.records.put("spaces", space.id, space);
         this.learning.initialize(operator, space.id, "procurement-preferences", initialPreferences);
+        this.learning.initialize(operator, space.id, "preference-schema", initialPreferenceSchema);
         this.workspace.history.append({
           id: `${space.id}:welcome`,
           workspaceId: space.id,
@@ -227,6 +244,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         });
       }
       this.records.put("metadata", "seeded", true);
+      this.records.put("metadata", "schema-seeded", true);
     });
   }
 
@@ -280,6 +298,21 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       history: this.workspace.history.list(principal, selected),
       pending,
       configuration: this.learning.configuration(principal, selected, "procurement-preferences"),
+      knowledgeSpaces: this.records
+        .list<KnowledgeSpace>("spaces")
+        .filter((space) => this.workspace.access.permits(principal, space.id, "read"))
+        .map((space) => ({
+          id: space.id,
+          label: space.label,
+          kind: space.kind,
+          revision: space.revision,
+          ...(persona === "developer" ? { grants: space.grants } : {}),
+        })),
+      sharedMemories: this.workspace.access.permits(principal, "shared-library", "read")
+        ? this.memory
+            .list(principal, "shared-library")
+            .map((entry) => ({ ...entry, value: decodeGraph(entry.value).value }))
+        : [],
       proposals: this.learning.list(principal, selected),
       capabilities: this.capabilities.list(principal),
       capabilityProtocols: capabilityProtocols().map(({ id, description }) => ({
@@ -295,6 +328,16 @@ export class DemoApplication extends DurableObject<DemoEnv> {
             this.workspace.access.visible(principal, selected, run.lineage),
         ),
       clusters: this.learning.clusters(principal, selected),
+      assessments:
+        persona === "developer"
+          ? this.records
+              .list<HeldoutAssessment>("heldout_assessments")
+              .filter((assessment) =>
+                this.learning
+                  .list(principal, selected)
+                  .some((proposal) => proposal.id === assessment.proposalId),
+              )
+          : [],
       memories: this.memory
         .list(principal, selected)
         .map((entry) => ({ ...entry, value: decodeGraph(entry.value).value })),
@@ -400,6 +443,74 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.seed();
     const principal = principalFor(persona);
     this.workspace.access.require(principal, workspaceId, "write");
+    if (command.action === "save-memory")
+      return this.memory.write(
+        principal,
+        { spaceId: workspaceId, title: command.title, kind: "fact", value: command.text },
+        [],
+      );
+    if (command.action === "publish-memory")
+      return this.memory.publish(principal, command.id, "shared-library", { reviewed: true });
+    if (command.action === "set-customer-access") {
+      invariant(
+        persona === "developer",
+        "ACCESS_DENIED",
+        "Permission changes require developer access.",
+      );
+      const space = this.records.get<KnowledgeSpace>("spaces", workspaceId)!;
+      const grants = space.grants.filter((grant) => grant.principalId !== command.principalId);
+      if (command.permissions.length)
+        grants.push({ principalId: command.principalId, permissions: command.permissions });
+      const updated = this.workspace.access.setGrants(
+        principal,
+        workspaceId,
+        grants,
+        command.expectedRevision,
+      );
+      for (const socket of this.ctx.getWebSockets())
+        socket.close(1008, "Permissions changed; refresh current access");
+      return updated;
+    }
+    if (command.action === "assess-proposal") return this.learning.assess(principal, command.id);
+    if (command.action === "propose-schema") {
+      invariant(
+        persona === "developer",
+        "ACCESS_DENIED",
+        "The schema exercise requires developer access.",
+      );
+      const feedbackId = crypto.randomUUID();
+      this.learning.feedback(principal, {
+        id: feedbackId,
+        workspaceId,
+        agent: "runtime",
+        kind: "correction",
+        text: "Retain a customer time-zone preference while keeping existing records valid.",
+        sourceRunId: "synthetic-schema-exercise",
+        lineage: [],
+        signature: "schema:time-zone",
+      });
+      const baseline = this.learning.configuration(principal, workspaceId, "preference-schema")!;
+      const proposal = this.learning.propose(principal, {
+        workspaceId,
+        kind: "schema",
+        target: "preference-schema",
+        baseRevision: baseline.revision,
+        candidate: {
+          ...initialPreferenceSchema,
+          properties: {
+            ...initialPreferenceSchema.properties,
+            timeZone: { type: "string", minLength: 1, maxLength: 100 },
+          },
+        },
+        rationale:
+          "Add an optional timeZone field without changing approval or invalidating existing records. This is a synthetic schema proposal for developer review.",
+        evidenceIds: [feedbackId],
+        lineage: [],
+        origin: "developer",
+      });
+      await this.learning.evaluate(principal, proposal.id);
+      return this.learning.read(principal, proposal.id);
+    }
     if (command.action === "propose-capability")
       return this.capabilities.propose(principal, {
         spaceId: workspaceId,
@@ -614,6 +725,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
             .at(-1)?.id ?? "before-first-run",
         lineage: [],
         corrected: { [command.preference]: true },
+        signature: `preference:${command.preference}:enabled`,
       });
       const selectedPipeline =
         command.action === "learn-with-model" ? this.modelPipeline : this.pipeline;

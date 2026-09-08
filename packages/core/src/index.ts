@@ -15,3 +15,5 @@ export * from "./capabilities.js";
 export * from "./artifacts.js";
 export * from "./connections.js";
 export * from "./budget.js";
+
+export * from "./clustering.js";

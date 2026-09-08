@@ -51,6 +51,20 @@ export const personaSchema = z.enum(["northstar", "cedar", "developer"]);
 export type Persona = z.infer<typeof personaSchema>;
 export const commandSchema = z.discriminatedUnion("action", [
   z.object({
+    action: z.literal("save-memory"),
+    title: z.string().min(1).max(160),
+    text: z.string().min(1).max(4000),
+  }),
+  z.object({ action: z.literal("publish-memory"), id: z.string().min(1) }),
+  z.object({
+    action: z.literal("set-customer-access"),
+    principalId: z.enum(["northstar", "cedar"]),
+    permissions: z.array(z.enum(["read", "write", "execute"])).max(3),
+    expectedRevision: z.number().int().nonnegative(),
+  }),
+  z.object({ action: z.literal("propose-schema") }),
+  z.object({ action: z.literal("assess-proposal"), id: z.string().uuid() }),
+  z.object({
     action: z.literal("propose-capability"),
     helperName: z.string().min(1).max(120),
     name: z.string().min(1).max(60),

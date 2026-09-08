@@ -1,0 +1,10 @@
+{
+  "name": "@durable-harness/benchmarks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@durable-harness/core": "0.1.0",
+    "@durable-harness/cloudflare": "0.1.0"
+  }
+}

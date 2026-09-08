@@ -1,5 +1,6 @@
 import { contentHash } from "./compiler.js";
 import { invariant } from "./errors.js";
+import { SignalClusters } from "./clustering.js";
 import { AccessPolicy } from "./policy.js";
 import type { Principal, RecordStore, SourceRef } from "./types.js";
 
@@ -17,6 +18,7 @@ export interface FeedbackSignal {
   original?: unknown;
   corrected?: unknown;
   embedding?: number[];
+  signature?: string;
 }
 export interface ChangeProposal {
   id: string;
@@ -76,6 +78,16 @@ export interface EvaluationReport {
   baseline: CaseScore[];
   candidate: CaseScore[];
   eligible: boolean;
+  createdAt: string;
+}
+export interface HeldoutAssessment {
+  id: string;
+  proposalId: string;
+  evaluatorId: string;
+  candidateHash: string;
+  cases: number;
+  passed: number;
+  meanScore: number;
   createdAt: string;
 }
 export interface EvaluationAdapter {
@@ -191,15 +203,17 @@ export class Learning {
     this.access.requireSources(principal, signal.lineage);
     const existing = this.store.get<FeedbackSignal>("feedback", signal.id);
     if (existing) {
+      const { createdAt: _createdAt, ...original } = existing;
       invariant(
-        existing.workspaceId === signal.workspaceId,
+        JSON.stringify(original) === JSON.stringify(signal),
         "INVALID_INPUT",
-        "Feedback identity belongs to another workspace.",
+        "This feedback identity already has different evidence. Record a new signal version instead.",
       );
       return existing;
     }
     const stored = { ...signal, createdAt: new Date().toISOString() };
     this.store.put("feedback", signal.id, stored);
+    new SignalClusters(this.store).groupStructured(principal, signal.id);
     return stored;
   }
   listFeedback(principal: Principal, workspaceId: string): FeedbackSignal[] {
@@ -212,30 +226,10 @@ export class Learning {
           this.access.visible(principal, workspaceId, signal.lineage),
       );
   }
-  clusters(
-    principal: Principal,
-    workspaceId: string,
-  ): { id: string; agent: string; signals: FeedbackSignal[]; kind: FeedbackSignal["kind"] }[] {
-    const clusters: {
-      id: string;
-      agent: string;
-      signals: FeedbackSignal[];
-      kind: FeedbackSignal["kind"];
-    }[] = [];
-    for (const signal of this.listFeedback(principal, workspaceId)) {
-      const cluster = clusters.find(
-        (cluster) =>
-          cluster.agent === signal.agent &&
-          cluster.kind === signal.kind &&
-          (cluster.signals[0]!.text === signal.text ||
-            cosine(cluster.signals[0]!.embedding, signal.embedding) >= 0.88),
-      );
-      if (cluster) cluster.signals.push(signal);
-      else
-        clusters.push({ id: signal.id, agent: signal.agent, kind: signal.kind, signals: [signal] });
-    }
-    return clusters;
+  clusters(principal: Principal, workspaceId: string) {
+    return new SignalClusters(this.store).list(principal, workspaceId);
   }
+
   propose(
     principal: Principal,
     input: Omit<
@@ -429,6 +423,60 @@ export class Learning {
     }
   }
 
+  async assess(principal: Principal, id: string): Promise<HeldoutAssessment> {
+    invariant(
+      principal.roles.includes("developer"),
+      "ACCESS_DENIED",
+      "Held-out assessment is a developer-controlled operation.",
+    );
+    const proposal = this.read(principal, id);
+    invariant(
+      proposal.promotedRevision !== undefined,
+      "EVALUATION_REQUIRED",
+      "Assess a promoted candidate; held-out feedback does not drive refinement.",
+    );
+    const target = this.target(proposal.target);
+    const candidateHash = await contentHash(JSON.stringify(proposal.candidate));
+    const key = `${id}:${target.evaluator.id}:${candidateHash}`;
+    const previous = this.store.get<HeldoutAssessment>("heldout_assessments", key);
+    if (previous) return previous;
+    const cases = target.cases.filter((testCase) => testCase.split === "heldout");
+    invariant(
+      cases.length > 0,
+      "EVALUATION_REQUIRED",
+      "This target has no held-out assessment cases.",
+    );
+    const scores: CaseScore[] = [];
+    for (const testCase of cases) {
+      this.access.requireSources(principal, proposal.lineage);
+      const score = await target.evaluator.evaluate({
+        configuration: proposal.candidate,
+        testCase,
+      });
+      invariant(
+        score.caseId === testCase.id &&
+          Number.isFinite(score.score) &&
+          score.score >= 0 &&
+          score.score <= 1,
+        "INVALID_INPUT",
+        "The assessor returned an invalid result.",
+      );
+      scores.push(score);
+    }
+    this.access.requireSources(principal, proposal.lineage);
+    const assessment: HeldoutAssessment = {
+      id: key,
+      proposalId: id,
+      evaluatorId: target.evaluator.id,
+      candidateHash,
+      cases: scores.length,
+      passed: scores.filter((score) => score.passed).length,
+      meanScore: scores.reduce((sum, score) => sum + score.score, 0) / scores.length,
+      createdAt: new Date().toISOString(),
+    };
+    this.store.put("heldout_assessments", key, assessment);
+    return assessment;
+  }
   async promote(principal: Principal, id: string, reviewed = false): Promise<ConfigurationVersion> {
     const proposal = this.read(principal, id);
     this.access.require(principal, proposal.workspaceId, "write");
@@ -554,13 +602,4 @@ export class Learning {
     );
     return target;
   }
-}
-
-function cosine(a?: number[], b?: number[]): number {
-  if (!a?.length || a.length !== b?.length) return -1;
-  const dot = a.reduce((sum, x, i) => sum + x * b[i]!, 0);
-  const norm = Math.sqrt(
-    a.reduce((sum, x) => sum + x * x, 0) * b.reduce((sum, x) => sum + x * x, 0),
-  );
-  return norm ? dot / norm : -1;
 }

@@ -88,6 +88,26 @@ export class WorkspaceTestHost extends DurableObject<{
       });
     const tools: ToolDefinition[] = [
       {
+        name: "crash-after-send",
+        version: "1",
+        spaceId: "test",
+        description: "Inject a runtime loss after a synthetic effect",
+        inputSchema: { type: "object" },
+        effect: "external",
+        publicActivity: "Sending a synthetic message",
+        execute: async (_input, context) => {
+          this.store.put("counts", "sends", (this.store.get<number>("counts", "sends") ?? 0) + 1);
+          this.store.put("crash_receipts", context.operationId, { delivered: true });
+          await this.ctx.storage.sync();
+          this.ctx.abort("Injected crash after durable effect receipt");
+        },
+        reconcile: async (id) => {
+          const result = this.store.get("crash_receipts", id);
+          return { found: !!result, result };
+        },
+      },
+
+      {
         name: "connection.send",
         version: "1",
         description: "Send after authorization",
@@ -273,3 +293,5 @@ export default {
 };
 
 export { SyntheticCatalog } from "../../apps/mcp-fixture/worker.js";
+
+export { BenchmarkRun } from "../../apps/benchmarks/worker.js";

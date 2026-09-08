@@ -3,10 +3,12 @@ import {
   type StepContext,
   type TurnContext,
   type PrepareStepContext,
+  type ThinkModel,
 } from "@cloudflare/think";
 import { tool } from "ai";
 import { z } from "zod";
 import { invariant } from "@durable-harness/core";
+import { modelData } from "@durable-harness/cloudflare";
 import { application, type DemoEnv, type ModelRequest } from "./protocol.js";
 
 /** Think owns turn admission; durable-harness owns authorized cells and their journal. */
@@ -14,7 +16,7 @@ export class HarnessThink extends Think<DemoEnv> {
   includeMcpTools = false;
   maxSteps = 8;
   sendReasoning = false;
-  getModel() {
+  getModel(): ThinkModel {
     return "@cf/meta/llama-3.3-70b-instruct-fp8-fast" as const;
   }
   private request(): ModelRequest {
@@ -34,15 +36,19 @@ export class HarnessThink extends Think<DemoEnv> {
       inspectWorkspace: tool({
         description:
           "Inspect named durable bindings, retained helper functions, current customer preferences, and authorized recent conversation.",
-        inputSchema: z.object({}),
-        execute: async () => this.application().modelContext(this.request().rootId),
+        inputSchema: z.object({
+          binding: z.string().optional(),
+          path: z.array(z.union([z.string(), z.number()])).optional(),
+        }),
+        execute: async ({ binding, path }) =>
+          modelData(await this.application().modelContext(this.request().rootId, binding, path)),
       }),
       executeCell: tool({
         description:
           "Execute a sandboxed TypeScript cell. Top-level named data persists after success. Retained helpers must take mutable data as arguments. Use tools.search/describe/call for authorized capabilities; history.search/read/around for originals; memory.read/write and artifacts.read/write for retained knowledge. Use runtime.now/uuid/random for nondeterminism. An approval or connection pause preserves the cell identity and settled operations. Do not repeat a paused action in a new cell.",
         inputSchema: z.object({ source: z.string().min(1).max(16_000) }),
         execute: async ({ source }, { toolCallId }) =>
-          this.application().modelCell(this.request().rootId, source, toolCallId),
+          modelData(await this.application().modelCell(this.request().rootId, source, toolCallId)),
       }),
     };
   }
@@ -76,6 +82,18 @@ export class HarnessThink extends Think<DemoEnv> {
     const stepId = await this.ctx.storage.get<string>(`budget-step:${request.rootId}`);
     if (stepId && context.usage.totalTokens !== undefined)
       await this.application().modelSettle(request.rootId, stepId, context.usage.totalTokens);
+    if (stepId)
+      await this.application().modelStep(request.rootId, stepId, {
+        finishReason: context.finishReason,
+        calls: context.toolCalls.map((call) => ({ name: call.toolName, input: call.input })),
+        results: context.toolResults.map((result) => ({
+          name: result.toolName,
+          output: result.output,
+        })),
+        errors: context.content
+          .filter((part) => part.type === "tool-error")
+          .map((part) => ({ name: part.toolName, error: String(part.error) })),
+      });
   }
   async run(request: ModelRequest): Promise<void> {
     let buffer = "";

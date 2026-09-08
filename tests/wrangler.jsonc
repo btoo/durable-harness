@@ -7,11 +7,14 @@
     "bindings": [
       { "name": "WORKSPACES", "class_name": "WorkspaceTestHost" },
       { "name": "APPLICATIONS", "class_name": "DemoApplication" },
-      { "name": "MODEL_AGENTS", "class_name": "HarnessThink" },
+      { "name": "MODEL_AGENTS", "class_name": "TestHarnessThink" },
     ],
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["WorkspaceTestHost", "DemoApplication", "HarnessThink"] },
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["WorkspaceTestHost", "DemoApplication", "TestHarnessThink"],
+    },
   ],
   "worker_loaders": [{ "binding": "LOADER" }],
   "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "durable-harness-test-artifacts" }],
@@ -20,5 +23,6 @@
     "SESSION_SECRET": "test-only-session-secret-at-least-32-characters",
     "CREDENTIAL_KEY": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
     "MODEL_ID": "synthetic",
+    "ADMIN_TOKEN": "test-only-model-admission",
   },
 }

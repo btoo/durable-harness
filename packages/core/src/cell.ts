@@ -89,6 +89,37 @@ export class DurableWorkspace {
     };
   }
 
+  readBinding(
+    principal: Principal,
+    workspaceId: string,
+    name: string,
+    path: (string | number)[] = [],
+  ): ValueGraph {
+    const snapshot = this.snapshot(principal, workspaceId);
+    const values = decodeGraph(snapshot.graph);
+    invariant(
+      Object.hasOwn(values, name),
+      "NOT_FOUND",
+      "No retained binding exists with that name.",
+    );
+    let value = values[name];
+    for (const key of path) {
+      invariant(
+        value !== null && typeof value === "object" && Object.hasOwn(value, key),
+        "NOT_FOUND",
+        "This binding has no value at the requested path.",
+      );
+      value = (value as Record<string | number, unknown>)[key];
+    }
+    const graph = encodeGraph({ value });
+    invariant(
+      JSON.stringify(graph).length <= 16_000,
+      "BUDGET_EXCEEDED",
+      "This value is too large to inspect at once. Read a narrower path or retain a bounded projection in a cell.",
+    );
+    return graph;
+  }
+
   operations(principal: Principal, workspaceId: string, cellId: string): OperationRecord[] {
     this.access.require(principal, workspaceId, "read");
     const cell = this.store.get<CellRecord>("cells", cellId);

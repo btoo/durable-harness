@@ -1,5 +1,5 @@
 import { SELF } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DemoState } from "../../apps/demo/src/api.js";
 
 async function session(persona = "northstar", previous = "") {
@@ -25,6 +25,46 @@ async function command(cookie: string, body: object, workspace = "northstar-quot
 }
 
 describe("authenticated reference application", () => {
+  it("executes Think tool calls and persists the streamed response", async () => {
+    const cookie = await session("developer");
+    const response = await SELF.fetch("https://demo.test/api/command?workspace=northstar-quoting", {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        authorization: "Bearer test-only-model-admission",
+      },
+      body: JSON.stringify({
+        action: "model",
+        message: "Create retained evidence notes and a reusable helper.",
+      }),
+    });
+    expect(response.status).toBe(200);
+    await vi.waitFor(
+      async () => {
+        const snapshot = await state(cookie);
+        expect(
+          snapshot.events.some((event) => event.kind === "model.completed"),
+          JSON.stringify(snapshot.modelSteps),
+        ).toBe(true);
+      },
+      { timeout: 5000, interval: 50 },
+    );
+    const snapshot = await state(cookie);
+    expect(
+      snapshot.workspace?.bindings.some((binding) => binding.name === "modelNotes"),
+      JSON.stringify(snapshot.modelSteps),
+    ).toBe(true);
+    expect(snapshot.workspace?.functions.some((helper) => helper.name === "countChecked")).toBe(
+      true,
+    );
+    expect(
+      snapshot.history.some(
+        (item) => item.text === "I retained the evidence notes and a helper for the next run.",
+      ),
+    ).toBe(true);
+    expect(snapshot.runs?.[0]?.steps).toBe(3);
+  });
   it("enforces tenant and developer boundaries on the actual HTTP paths", async () => {
     const cookie = await session();
     expect(

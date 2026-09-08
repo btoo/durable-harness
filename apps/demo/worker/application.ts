@@ -192,6 +192,14 @@ export class DemoApplication extends DurableObject<DemoEnv> {
                   : [],
               ),
             runs: this.records.list<RootRun>("root_runs"),
+            modelSteps: this.records.list<{
+              rootId: string;
+              stepId: string;
+              calls: unknown[];
+              results: unknown[];
+              errors: unknown[];
+              finishReason: string;
+            }>("model_steps"),
           }
         : {}),
     };
@@ -455,11 +463,14 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     );
   }
 
-  async modelContext(rootId: string) {
+  async modelContext(rootId: string, binding?: string, path: (string | number)[] = []) {
     const request = this.modelRequest(rootId);
     const principal = principalFor(request.principalId as Persona);
     return {
       workspace: this.workspace.inspect(principal, request.workspaceId),
+      ...(binding
+        ? { value: this.workspace.readBinding(principal, request.workspaceId, binding, path) }
+        : {}),
       history: this.workspace.history
         .list(principal, request.workspaceId)
         .slice(-8)
@@ -504,6 +515,14 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.modelRequest(rootId);
     this.budgets.settle(rootId, stepId, tokens);
   }
+  modelStep(
+    rootId: string,
+    stepId: string,
+    evidence: { calls: unknown[]; results: unknown[]; errors: unknown[]; finishReason: string },
+  ): void {
+    this.modelRequest(rootId);
+    this.records.put("model_steps", stepId, { rootId, stepId, ...evidence });
+  }
   async modelCell(rootId: string, source: string, cellId: string) {
     const request = this.modelRequest(rootId);
     const result = await this.execute(
@@ -533,6 +552,14 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     const request = this.modelRequest(rootId);
     const principal = principalFor(request.principalId as Persona);
     const lineage = this.workspace.snapshot(principal, request.workspaceId).lineage;
+    if (this.records.get("model_terminals", rootId)) return;
+    const run = this.budgets.read(rootId);
+    const lastStep = this.records
+      .list<{ rootId: string; finishReason: string }>("model_steps")
+      .filter((step) => step.rootId === rootId)
+      .at(-1);
+    if (kind === "completed" && run.steps >= run.limits.steps && lastStep?.finishReason !== "stop")
+      kind = "interrupted";
     if (chunkId && this.records.get("model_chunks", chunkId)) return;
     const previous = this.records.get<string>("model_text", rootId) ?? "";
     const content = kind === "delta" ? previous + text : previous;
@@ -544,6 +571,8 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.records.transaction(() => {
       if (kind === "delta") this.records.put("model_text", rootId, content);
       if (chunkId) this.records.put("model_chunks", chunkId, true);
+      if (kind === "completed" || kind === "failed")
+        this.records.put("model_terminals", rootId, kind);
       this.workspace.events.append({
         workspaceId: request.workspaceId,
         kind: `model.${kind}`,
@@ -552,7 +581,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
           kind === "delta"
             ? text
             : kind === "completed"
-              ? "Agent run completed"
+              ? "Agent response finished"
               : kind === "interrupted"
                 ? "The agent was interrupted; its progress is saved"
                 : "The agent could not complete this run",

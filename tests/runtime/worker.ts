@@ -12,6 +12,7 @@ import { CloudflareCellExecutor, R2Artifacts, durableStore } from "@durable-harn
 import demoWorker from "../../apps/demo/worker/index.js";
 import type { DemoEnv } from "../../apps/demo/worker/protocol.js";
 export { DemoApplication, HarnessThink } from "../../apps/demo/worker/index.js";
+export { TestHarnessThink } from "./model.js";
 
 export const developer: Principal = { id: "developer", deploymentId: "test", roles: ["developer"] };
 export const customer: Principal = { id: "customer", deploymentId: "test", roles: ["customer"] };

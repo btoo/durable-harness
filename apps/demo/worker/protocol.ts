@@ -29,6 +29,7 @@ export type ApplicationStub = DurableObjectStub &
     | "modelPrepared"
     | "modelReserve"
     | "modelSettle"
+    | "modelStep"
     | "modelCell"
     | "modelEvent"
   >;

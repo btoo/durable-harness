@@ -8,7 +8,7 @@
   SQLite record store, permissions, history, operation journal, and event log.
 - Eighteen unit tests pass over graph values, real SQLite, publication policy, scoped FTS,
   compaction, evaluated learning, encrypted credentials, rotation/revocation, artifacts, and budgets.
-- Fourteen real Workers runtime tests pass: eviction recovery, approval/resume, helper version pins,
+- Sixteen real Workers runtime tests pass: eviction recovery, approval/resume, helper version pins,
   input validation, unsupported captures, revoked grants, stream/history parity, uncertain
   effects, replay divergence, retained memory/R2 artifact handles, HTTP role enforcement,
   customer correction impact, approval delivery, and WebSocket/history parity.
@@ -17,7 +17,21 @@
 - React/Vite customer and developer reference UI runs against actual harness APIs.
 - Browser proof: a tested PO correction moved a Sunday follow-up to Monday on the next run;
   approval/resume and saved activity survived reload; retained helper `nextFollowup` is inspectable.
-- Think integration and budgeted real-model endpoint are implemented but not yet exercised.
+- Think integration now passes a controlled-provider test through tool dispatch, cell commit,
+  streamed text, history persistence, and budget accounting. RPC disposal symbols are detached
+  before entering the model's JSON tool output.
+
+## Deployed experiment
+
+- URL: https://durable-harness-demo.btjk138.workers.dev
+- Verified source revision: `e8033f2`; Cloudflare version `258f7433-f6bb-4b4d-9013-1af96f7c9b80`.
+- Deployed checks passed for PO/quoting correction impact, cross-tenant denial, approval replay,
+  retained bindings/helpers, and the browser's live subscription.
+- First real-model attempt: eight steps, 15,810 reported tokens, 27.2 seconds active execution.
+  It produced no new cells and **did not prove** the generation contract. A subsequent local
+  controlled-provider test exposed and fixed RPC metadata contaminating model tool output.
+- Further real-model and recovery verification is in progress. There is no comparative
+  effectiveness result yet.
 
 ## Current verification
 

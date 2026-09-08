@@ -137,6 +137,22 @@ comparative benchmarks, and live HTTP observation verification remain under impl
 Each browser experiment uses one Durable Object containing
 its synthetic tenant spaces; scaling to thousands of tenants has not been demonstrated.
 
+## Reviewed capabilities
+
+`Capabilities.propose` snapshots an existing helper and its pinned dependencies without copying
+workspace data. A developer-registered protocol supplies the input contract, argument mapping,
+and authoritative evaluation cases. `evaluate` runs that program in an isolated executor.
+
+`approve` activates a passing version in its original space. `publish` is a separate developer
+decision requiring publication rights in both source and target spaces and the current target
+revision. It creates a new artifact; private provenance remains in the operator audit record.
+Callers use the published code with their own data and authority. These v1 published helpers
+are pure: they receive no host I/O or author credentials.
+
+Register `...capabilities.definitions()` in the workspace's tool factory. Execution uses the
+same discovery and journal path as other tools. A revoked version cannot execute. The reference
+UI exposes source review, checks, approval, publication, and reuse through actual APIs.
+
 ## Delegated work
 
 `AgentRegistry` persists agent identities, parent relationships, narrowed authority,

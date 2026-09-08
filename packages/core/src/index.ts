@@ -11,6 +11,7 @@ export * from "./context.js";
 export * from "./learning.js";
 export * from "./pipeline.js";
 export * from "./agents.js";
+export * from "./capabilities.js";
 export * from "./artifacts.js";
 export * from "./connections.js";
 export * from "./budget.js";

@@ -94,6 +94,14 @@
   actor restart, read the exact original correction, recomputed the modified quote comparison,
   and preserved the original analysis. It completed in four steps, 22,004 reported tokens,
   and 91.0 seconds. This is a contract proof, not a comparative superiority result.
+- Real-model learning passed on application version `1513b33b-b597-4a22-b1cd-75e08c5062dc`.
+  GLM proposed the freight preference, the generic pipeline evaluated and promoted it, and the
+  next quoting exercise changed its recommendation correctly. The run used one model step,
+  847 reported tokens, and 7.5 seconds. Unrelated preferences and approval remained unchanged.
+- Quoting now delegates deterministic arithmetic checks to separate durable supplier agents.
+  Agent identities, mailboxes, results, narrowed grants and parent revocation are tested.
+- Capability approval and broader publication are separate operations. Tests exercise an actual
+  Worker executor and verify cross-customer reuse without sharing private working data or settings.
 
 ## Current verification
 

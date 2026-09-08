@@ -25,6 +25,58 @@ async function command(cookie: string, body: object, workspace = "northstar-quot
 }
 
 describe("authenticated reference application", () => {
+  it("shares reviewed code while keeping customer-specific preferences private", async () => {
+    const cookie = await session("developer");
+    await command(cookie, { action: "run-synthetic" });
+    await command(cookie, {
+      action: "correct",
+      preference: "includeFreight",
+      text: "Northstar includes freight.",
+    });
+    const response = await command(cookie, {
+      action: "propose-capability",
+      helperName: "rankOffers",
+      name: "quote-comparison",
+      protocolId: "rank-offers-v1",
+    });
+    expect(response.status).toBe(200);
+    const proposal = (await response.json()) as { id: string };
+    const beforeSharing = await session("cedar", cookie);
+    expect((await state(beforeSharing, "cedar-quoting")).capabilities).toHaveLength(0);
+    const developer = await session("developer", beforeSharing);
+    expect(
+      (
+        await command(developer, {
+          action: "publish-capability",
+          id: proposal.id,
+          expectedRevision: 0,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await command(developer, { action: "evaluate-capability", id: proposal.id })).status,
+    ).toBe(200);
+    expect(
+      (await command(developer, { action: "approve-capability", id: proposal.id })).status,
+    ).toBe(200);
+    const published = await command(developer, {
+      action: "publish-capability",
+      id: proposal.id,
+      expectedRevision: 0,
+    });
+    expect(published.status).toBe(200);
+    const shared = (await published.json()) as { id: string };
+    const cedar = await session("cedar", developer);
+    const snapshot = await state(cedar, "cedar-quoting");
+    expect(snapshot.capabilities).toHaveLength(1);
+    expect((snapshot.configuration!.value as { includeFreight: boolean }).includeFreight).toBe(
+      false,
+    );
+    expect(
+      (await command(cedar, { action: "use-capability", id: shared.id }, "cedar-quoting")).status,
+    ).toBe(200);
+  });
+
   it("delegates quote checks to durable supplier agents and retains their relationships after restart", async () => {
     const cookie = await session("developer");
     const ran = await command(cookie, { action: "run-synthetic" });

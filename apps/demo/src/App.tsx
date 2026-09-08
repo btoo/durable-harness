@@ -29,13 +29,14 @@ import {
   type DemoState,
   type Persona,
 } from "./api.js";
+import { Capabilities } from "./Capabilities.js";
 import { Connections } from "./Connections.js";
 import { ModelRun } from "./ModelRun.js";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { HarnessEvent } from "@durable-harness/core";
 
-type View = "activity" | "workspace" | "learning" | "connections";
+type View = "activity" | "workspace" | "learning" | "connections" | "capabilities";
 const time = (value: string) =>
   new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(
     new Date(value),
@@ -329,6 +330,14 @@ export function App() {
               <Link2 size={16} />
               Connections
             </button>
+            <button
+              role="tab"
+              aria-selected={view === "capabilities"}
+              onClick={() => setView("capabilities")}
+            >
+              <Code2 size={16} />
+              Capabilities
+            </button>
           </div>
           {error ? (
             <div className="error-banner" role="alert">
@@ -473,6 +482,13 @@ export function App() {
                 </>
               ) : view === "workspace" && developer && data ? (
                 <Workspace data={data} busy={busy} perform={(value) => void perform(value)} />
+              ) : view === "capabilities" && data ? (
+                <Capabilities
+                  key={`${data.persona}:${data.selected}`}
+                  data={data}
+                  busy={busy}
+                  perform={perform}
+                />
               ) : view === "connections" && data ? (
                 <Connections
                   key={`${data.persona}:${data.selected}`}

@@ -50,6 +50,20 @@ export function application(env: DemoEnv, sandbox: string): ApplicationStub {
 export const personaSchema = z.enum(["northstar", "cedar", "developer"]);
 export type Persona = z.infer<typeof personaSchema>;
 export const commandSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("propose-capability"),
+    helperName: z.string().min(1).max(120),
+    name: z.string().min(1).max(60),
+    protocolId: z.enum(["rank-offers-v1", "analyze-offers-v1"]),
+  }),
+  z.object({ action: z.literal("evaluate-capability"), id: z.string().uuid() }),
+  z.object({ action: z.literal("approve-capability"), id: z.string().uuid() }),
+  z.object({
+    action: z.literal("publish-capability"),
+    id: z.string().uuid(),
+    expectedRevision: z.number().int().nonnegative(),
+  }),
+  z.object({ action: z.literal("use-capability"), id: z.string().uuid() }),
   z.object({ action: z.literal("resume-learning"), runId: z.string().uuid() }),
   z.object({
     action: z.literal("read-model-step"),

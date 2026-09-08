@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   Artifacts,
+  Capabilities,
   DurableWorkspace,
   HarnessFault,
   asFault,
@@ -9,7 +10,13 @@ import {
   type Principal,
   type ToolDefinition,
 } from "@durable-harness/core";
-import { CloudflareCellExecutor, R2Artifacts, durableStore } from "@durable-harness/cloudflare";
+import {
+  CloudflareCellExecutor,
+  PureCapabilityExecutor,
+  R2Artifacts,
+  durableStore,
+  modelData,
+} from "@durable-harness/cloudflare";
 import demoWorker from "../../apps/demo/worker/index.js";
 import type { DemoEnv } from "../../apps/demo/worker/protocol.js";
 export { HarnessThink, SupplierAgent } from "../../apps/demo/worker/index.js";
@@ -26,6 +33,27 @@ export class WorkspaceTestHost extends DurableObject<{
 }> {
   private readonly store = durableStore(this.ctx);
   private readonly workspace: DurableWorkspace;
+  private readonly capabilities = new Capabilities(
+    this.store,
+    new PureCapabilityExecutor(this.env.LOADER),
+    [
+      {
+        id: "double-v1",
+        description: "Double a number",
+        inputSchema: {
+          type: "object",
+          properties: { value: { type: "number" } },
+          required: ["value"],
+        },
+        arguments: (input) => [(input as { value: number }).value],
+        cases: [
+          { id: "positive", input: { value: 2 }, expected: 4 },
+          { id: "negative", input: { value: -3 }, expected: -6 },
+        ],
+        assess: (actual, expected) => actual === expected,
+      },
+    ],
+  );
   constructor(ctx: DurableObjectState, env: { LOADER: WorkerLoader; ARTIFACTS: R2Bucket }) {
     super(ctx, env);
     const space: KnowledgeSpace = {
@@ -46,6 +74,16 @@ export class WorkspaceTestHost extends DurableObject<{
         id: "operator-private",
         grants: [
           { principalId: developer.id, permissions: ["read", "write", "execute", "publish"] },
+        ],
+      });
+    if (!this.store.get("spaces", "library"))
+      this.store.put("spaces", "library", {
+        ...space,
+        id: "library",
+        kind: "library",
+        grants: [
+          { principalId: developer.id, permissions: ["read", "write", "execute", "publish"] },
+          { principalId: "other-customer", permissions: ["read", "execute"] },
         ],
       });
     const tools: ToolDefinition[] = [
@@ -138,7 +176,7 @@ export class WorkspaceTestHost extends DurableObject<{
       },
     ];
     this.workspace = new DurableWorkspace(this.store, new CloudflareCellExecutor(env.LOADER), {
-      tools,
+      tools: () => [...tools, ...this.capabilities.definitions()],
       artifacts: new Artifacts(this.store, new R2Artifacts(env.ARTIFACTS)),
     });
   }
@@ -184,6 +222,43 @@ export class WorkspaceTestHost extends DurableObject<{
   }
   revokePrivate() {
     this.workspace.access.setGrants(developer, "operator-private", [], 1);
+  }
+  async capability(action: string, id?: string) {
+    try {
+      const outsider: Principal = {
+        id: "other-customer",
+        deploymentId: "test",
+        roles: ["customer"],
+      };
+      if (action === "propose")
+        return {
+          ok: true,
+          value: modelData(
+            await this.capabilities.propose(developer, {
+              spaceId: "test",
+              helperName: id ?? "double",
+              name: "double",
+              protocolId: "double-v1",
+            }),
+          ),
+        };
+      if (action === "evaluate")
+        return { ok: true, value: modelData(await this.capabilities.evaluate(developer, id!)) };
+      if (action === "approve")
+        return { ok: true, value: modelData(await this.capabilities.approve(developer, id!)) };
+      if (action === "customer-approve")
+        return { ok: true, value: modelData(await this.capabilities.approve(customer, id!)) };
+      if (action === "publish")
+        return {
+          ok: true,
+          value: modelData(this.capabilities.publish(developer, id!, "library", 0)),
+        };
+      if (action === "other-read")
+        return { ok: true, value: modelData(this.capabilities.read(outsider, id!)) };
+      throw new Error("Unknown capability fixture action");
+    } catch (error) {
+      return { ok: false, error: asFault(error).toJSON() };
+    }
   }
   authorizeConnection() {
     this.store.put("connection", "ready", true);

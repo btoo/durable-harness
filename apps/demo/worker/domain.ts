@@ -283,3 +283,73 @@ const recommendation = comparison.offers[0];
 await runtime.progress(recommendation.supplier + " is the lowest-cost option " + (preferences.includeFreight ? "including freight." : "before freight."));
 `;
 }
+
+export function capabilityProtocols(): import("@durable-harness/core").CapabilityProtocol[] {
+  const inputSchema = {
+    type: "object",
+    properties: {
+      rfq: { type: "string" },
+      offers: { type: "array", minItems: 1, maxItems: 100, items: { type: "object" } },
+      includeFreight: { type: "boolean" },
+      businessDaysOnly: { type: "boolean" },
+    },
+    required: ["offers", "includeFreight"],
+    additionalProperties: false,
+  };
+  const cases = [
+    { id: "landed-cost", input: { offers, includeFreight: true }, expected: "Brookfield Parts" },
+    {
+      id: "unit-price-preference",
+      input: { offers, includeFreight: false },
+      expected: "Aster Components",
+    },
+    {
+      id: "different-suppliers",
+      input: {
+        offers: [
+          { supplier: "Cypress", unitPrice: 3, quantity: 10, freight: 20, leadDays: 4 },
+          { supplier: "Delta", unitPrice: 7, quantity: 10, freight: 0, leadDays: 2 },
+        ],
+        includeFreight: true,
+      },
+      expected: "Cypress",
+    },
+  ];
+  return [
+    {
+      id: "rank-offers-v1",
+      description:
+        "Rank supplier offers using a reviewed helper and the caller's freight preference.",
+      inputSchema,
+      cases,
+      arguments: (input) => {
+        const value = input as { offers: unknown; includeFreight: boolean };
+        return [value.offers, value.includeFreight];
+      },
+      assess: (output, expected) => Array.isArray(output) && output[0]?.supplier === expected,
+    },
+    {
+      id: "analyze-offers-v1",
+      description: "Analyze supplier offers using a reviewed helper and the caller's preferences.",
+      inputSchema,
+      cases,
+      arguments: (input) => {
+        const value = input as {
+          rfq?: string;
+          offers: unknown;
+          includeFreight: boolean;
+          businessDaysOnly?: boolean;
+        };
+        return [
+          value.rfq ?? "RFQ",
+          value.offers,
+          value.includeFreight,
+          value.businessDaysOnly ?? false,
+        ];
+      },
+      assess: (output, expected) =>
+        (output as { recommendation?: { supplier?: string } })?.recommendation?.supplier ===
+        expected,
+    },
+  ];
+}

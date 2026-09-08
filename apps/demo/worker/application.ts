@@ -5,6 +5,7 @@ import { Lifecycle } from "agents/lifecycle";
 import { MCPClientManager } from "agents/mcp/client";
 import {
   Artifacts,
+  Capabilities,
   AgentRegistry,
   ContextManager,
   DEFAULT_RUN_LIMITS,
@@ -31,6 +32,7 @@ import {
 } from "@durable-harness/core";
 import {
   CloudflareCellExecutor,
+  PureCapabilityExecutor,
   CloudflareMcpTransport,
   EncryptedSecrets,
   EncryptedCredentialVault,
@@ -42,6 +44,7 @@ import {
 } from "@durable-harness/cloudflare";
 import {
   DEMO_DEPLOYMENT,
+  capabilityProtocols,
   domainTools,
   initialPreferences,
   operator,
@@ -90,6 +93,11 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.mcpTransport,
   );
   private readonly agents = new AgentRegistry(this.records);
+  private readonly capabilities = new Capabilities(
+    this.records,
+    new PureCapabilityExecutor(this.env.LOADER),
+    capabilityProtocols(),
+  );
   private readonly memory = new Memory(this.records);
   private readonly learning = new Learning(this.records, [preferencesTarget()]);
   private readonly pipeline = new LearningPipeline(this.records, this.learning, {
@@ -136,6 +144,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       tools: () => [
         ...domainTools(this.records, (input, context) => this.verifySuppliers(input, context)),
         ...this.connections.capabilities(),
+        ...this.capabilities.definitions(),
       ],
       memory: this.memory,
       artifacts: new Artifacts(this.records, new R2Artifacts(this.env.ARTIFACTS)),
@@ -163,6 +172,19 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       "ACCESS_DENIED",
       "Synthetic identity switching is disabled in this deployment.",
     );
+    if (!this.records.get("spaces", "shared-library"))
+      this.records.put("spaces", "shared-library", {
+        id: "shared-library",
+        deploymentId: DEMO_DEPLOYMENT,
+        kind: "library",
+        label: "Reviewed shared library",
+        revision: 1,
+        grants: [
+          { principalId: "developer", permissions: ["read", "write", "execute", "publish"] },
+          { principalId: "northstar", permissions: ["read", "execute"] },
+          { principalId: "cedar", permissions: ["read", "execute"] },
+        ],
+      } satisfies KnowledgeSpace);
     if (this.records.get("metadata", "seeded")) return;
     this.records.transaction(() => {
       for (const workspace of workspaces) {
@@ -259,6 +281,11 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       pending,
       configuration: this.learning.configuration(principal, selected, "procurement-preferences"),
       proposals: this.learning.list(principal, selected),
+      capabilities: this.capabilities.list(principal),
+      capabilityProtocols: capabilityProtocols().map(({ id, description }) => ({
+        id,
+        description,
+      })),
       agents: this.agents.list(principal, selected),
       learningRuns: this.records
         .list<LearningRun>("learning_runs")
@@ -373,6 +400,43 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.seed();
     const principal = principalFor(persona);
     this.workspace.access.require(principal, workspaceId, "write");
+    if (command.action === "propose-capability")
+      return this.capabilities.propose(principal, {
+        spaceId: workspaceId,
+        helperName: command.helperName,
+        name: command.name,
+        protocolId: command.protocolId,
+      });
+    if (command.action === "evaluate-capability")
+      return this.capabilities.evaluate(principal, command.id);
+    if (command.action === "approve-capability")
+      return this.capabilities.approve(principal, command.id);
+    if (command.action === "publish-capability")
+      return this.capabilities.publish(
+        principal,
+        command.id,
+        "shared-library",
+        command.expectedRevision,
+      );
+    if (command.action === "use-capability") {
+      const capability = this.capabilities.read(principal, command.id);
+      invariant(
+        capability.status === "approved" || capability.status === "published",
+        "ACCESS_DENIED",
+        "Only an approved capability can be used.",
+      );
+      invariant(
+        workspaces.find((item) => item.id === workspaceId)?.kind === "quoting",
+        "INVALID_INPUT",
+        "Use a quoting workspace for this capability.",
+      );
+      return this.execute(
+        principal,
+        workspaceId,
+        `const capabilityEvidence = await tools.call(${JSON.stringify(`${workspaceId}.read`)}, {}); const capabilityPreferences = await tools.call(${JSON.stringify(`${workspaceId}.preferences`)}, {}); const sharedComparison = await tools.call(${JSON.stringify(`capability.${capability.spaceId}.${capability.name}.v${capability.revision}`)}, {rfq:capabilityEvidence.rfq,offers:capabilityEvidence.offers,includeFreight:capabilityPreferences.includeFreight,businessDaysOnly:capabilityPreferences.businessDaysOnly}); sharedComparison;`,
+        crypto.randomUUID(),
+      );
+    }
     if (command.action === "read-model-step") {
       invariant(
         persona === "developer",

@@ -7,6 +7,19 @@ import { HarnessFault, invariant } from "./errors.js";
 import type { FunctionModule, WorkspaceSnapshot } from "./types.js";
 
 const runtimeNames = new Set(["tools", "runtime", "history", "memory", "artifacts", "console"]);
+const reservedNames = new Set([
+  "host",
+  "globalThis",
+  "self",
+  "Function",
+  "eval",
+  "fetch",
+  "WebSocket",
+  "crypto",
+  "performance",
+  "setTimeout",
+  "setInterval",
+]);
 const globals = new Set([
   "Array",
   "Object",
@@ -39,6 +52,43 @@ const globals = new Set([
 export async function contentHash(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+/** Revalidate pinned source under the current language policy, including published pure helpers. */
+export function validateModuleSource(module: FunctionModule, allowHostCalls = true): void {
+  invariant(
+    !reservedNames.has(module.name) && !module.name.startsWith("__dh"),
+    "INVALID_CELL",
+    "This module name is reserved by the runtime.",
+  );
+  const ast = parse(module.source, { sourceType: "module" });
+  traverse(ast, {
+    ImportExpression() {
+      throw new HarnessFault(
+        "INVALID_CELL",
+        "Retained modules cannot import ambient capabilities.",
+      );
+    },
+    ThisExpression() {
+      throw new HarnessFault(
+        "UNSUPPORTED_CAPTURE",
+        "Retained modules require explicit arguments instead of this.",
+      );
+    },
+    ReferencedIdentifier(path) {
+      const name = path.node.name;
+      invariant(
+        !name.startsWith("__dh") &&
+          (path.scope.hasBinding(name) ||
+            globals.has(name) ||
+            Object.hasOwn(module.dependencies, name) ||
+            (allowHostCalls && runtimeNames.has(name)) ||
+            name === "console"),
+        "UNSUPPORTED_CAPTURE",
+        `Module ${module.name} refers to ${name}, outside its declared pure dependencies.`,
+      );
+    },
+  });
 }
 
 function transpile(source: string): string {
@@ -121,7 +171,10 @@ export async function compileCell(
   }
   for (const name of declared)
     invariant(
-      !name.startsWith("__dh") && !runtimeNames.has(name) && !globals.has(name),
+      !name.startsWith("__dh") &&
+        !runtimeNames.has(name) &&
+        !globals.has(name) &&
+        !reservedNames.has(name),
       "INVALID_CELL",
       `The binding name ${name} is reserved by the runtime.`,
     );
@@ -252,6 +305,7 @@ export async function compileCell(
   };
   const factories = Object.values(archive)
     .map((module) => {
+      validateModuleSource(module);
       const dependencies = Object.entries(module.dependencies)
         .map(([name, version]) => {
           invariant(

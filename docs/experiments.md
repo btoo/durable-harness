@@ -3,6 +3,63 @@
 These results establish several implemented contracts. They do not establish general
 superiority or production readiness. All public experiments used synthetic business data.
 
+## Sequential tool and recovery study — September 8
+
+The [protocol](../benchmarks/sequential-tool-study.md) and
+[machine-readable results](../benchmarks/results/sequential-tool-2026-09-08.json) cover
+generated JavaScript tools, rather than predeclared boolean preferences. Customer corrections
+first require currency/freight normalization, then pack pricing and minimum-order handling.
+The second stage retains the first stage's validation cases. Twelve held-out cases are
+assessed only after the final candidate is frozen, without exposing their answers to proposers.
+
+GEPA uses its real reflective mutation and selection with a supported code-oriented prompt
+template. Both methods use GLM-5.3-Flash with default reasoning, three candidate attempts,
+48,000 tokens and 120 seconds per stage, and explicit synthetic review for executable changes.
+
+| Method            | Held-out trial 1 | Held-out trial 2 | Stages producing an approved improvement |
+| ----------------- | ---------------- | ---------------- | ---------------------------------------- |
+| Learning disabled | 3/12             | 3/12             | 0/4                                      |
+| durable-harness   | 8/12             | 3/12             | 1/4                                      |
+| Codemode + GEPA   | 8/12             | 3/12             | 1/4                                      |
+
+Six of the eight model-driven stages timed out before a candidate became available. Both
+methods retained their previously approved implementation. **No outcome advantage was
+observed.** These runs expose a practical limitation of the chosen model/request format under
+the fixed time budget; they do not isolate provider latency, reasoning time, or optimizer
+quality as the cause. Unresolved token reservations are reported separately from known usage.
+
+The first deployed recovery comparison uncovered a harness defect: production bundling
+injected naming helpers into runtime functions serialized with `toString()`, so installation
+failed with `__name is not defined`. The filesystem comparator passed. After generating
+runtime text from canonical source before bundling, the exact deployed rerun passed all eight
+cases: four used model-generated tools and four used unchanged-seed controls. Every case
+performed one input read, one synthetic order and one reconciliation across actual actor
+interruption and replay. The filesystem path includes application-authored checkpoints and
+the same connector reconciliation support; **recovery rework also tied** on this scenario.
+
+A separate, prebounded source-edit follow-up started from the first harness trial's approved
+tool. In one step, 5,722 reported tokens and 74.9 seconds of active time, it produced an eligible
+pack-pricing repair. Synthetic review promoted it; validation rose from 5/8 to 8/8 and held-out
+assessment from 8/12 to 12/12. This demonstrates a successful additional improvement. It does
+not establish that edit-based generation outperforms another full-source retry; keep the new
+generator optional until a matched comparison supports that claim.
+The repaired tool subsequently survived the same deployed interruption in both runtimes,
+retaining the Brook recommendation at USD 76.80 and producing no duplicate order.
+
+An earlier setup batch used GEPA's instruction-writing default template and produced prose;
+it was stopped and excluded from optimizer comparisons. An immediate post-deploy request
+also reached the preceding Worker version before the edit endpoint was available, without
+executing a model step. Follow-up scripts now verify the requested deployment version.
+
+The learning comparison used source `57be6be` and Worker
+`c81857f3-57d1-4d6b-ad2a-b5795de2e043`. Corrected recovery and the edit follow-up used source
+`677aa68` and Worker `937e2d0a-f04a-480c-96ad-4de843f49df5`.
+
+These remain hand-authored synthetic scenarios with automated review and a synthetic provider
+receipt table. They do not measure human integration/review effort, independent-provider
+failures, or production outcomes. Keep optimization replaceable and focus further work on
+reliable bounded proposals and integration effort before expanding the workspace architecture.
+
 ## Durable workspace
 
 Kimi K2.7 Code invented a quote-analysis structure and a reusable helper in four steps

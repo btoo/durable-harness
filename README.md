@@ -15,8 +15,10 @@ reviewed capabilities, scoped knowledge, and remote MCP connections.
 [Read the API guide](docs/api.md) · [See the experimental results](docs/experiments.md)
 
 Real-model checks proved generation, recovery after compaction and restart, a tested
-customer-preference improvement, and cross-customer reuse of reviewed code. The first
-small learning comparison found **no quality advantage over Codemode + GEPA**. See the
+customer-preference improvement, and cross-customer reuse of reviewed code. The comparison
+studies have **not established an advantage over Codemode + GEPA**. A separate source-edit
+follow-up repaired an unfinished tool and passed 12/12 synthetic held-out cases; see the
+[experiment report](docs/experiments.md) for the matched results and limitations. See the
 [acceptance register](docs/acceptance.md) for remaining work; no production-readiness or
 superiority claim is made. The Recordly walkthrough is still being prepared.
 
@@ -80,21 +82,22 @@ undo an external action.
 
 ## API concept map
 
-| API                                                           | Responsibility                                                    |
-| ------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `DurableWorkspace.execute(principal, space, source, options)` | Execute and atomically commit a cell                              |
-| `inspect`, `snapshot`, `operations`                           | Inspect retained state and execution records                      |
-| `approve` / `reject`                                          | Resolve a pending action using current authority                  |
-| `Memory.read`, `write`, `publish`                             | Version knowledge and enforce sharing policy                      |
-| `Artifacts.write`, `read`                                     | Retain blobs and retrieve bounded byte ranges                     |
-| `History.search`, `read`, `around`                            | Recover authorized original evidence                              |
-| `ContextManager.prepare`                                      | Budget context without deleting originals                         |
-| `Learning.feedback`, `propose`, `evaluate`, `promote`         | Apply measured, policy-controlled changes                         |
-| `RunBudgets`                                                  | Account for steps, tokens, active time, and descendant admissions |
-| `Connections`                                                 | Track ownership, grants, refresh, and reconnection                |
-| `LearningPipeline`                                            | Resume bounded generation, evaluation, promotion and review       |
-| `AgentRegistry`                                               | Persist scoped delegation, mailboxes and immutable results        |
-| `Capabilities`                                                | Evaluate, approve and separately publish reusable code            |
+| API                                                           | Responsibility                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `DurableWorkspace.execute(principal, space, source, options)` | Execute and atomically commit a cell                                |
+| `inspect`, `snapshot`, `operations`                           | Inspect retained state and execution records                        |
+| `approve` / `reject`                                          | Resolve a pending action using current authority                    |
+| `Memory.read`, `write`, `publish`                             | Version knowledge and enforce sharing policy                        |
+| `Artifacts.write`, `read`                                     | Retain blobs and retrieve bounded byte ranges                       |
+| `History.search`, `read`, `around`                            | Recover authorized original evidence                                |
+| `ContextManager.prepare`                                      | Budget context without deleting originals                           |
+| `Learning.feedback`, `propose`, `evaluate`, `promote`         | Apply measured, policy-controlled changes                           |
+| `RunBudgets`                                                  | Account for steps, tokens, active time, and descendant admissions   |
+| `Connections`                                                 | Track ownership, grants, refresh, and reconnection                  |
+| `LearningPipeline`                                            | Resume bounded generation, evaluation, promotion and review         |
+| `modelCodeEditGenerator`                                      | Propose exact source edits for the same evaluation and review gates |
+| `AgentRegistry`                                               | Persist scoped delegation, mailboxes and immutable results          |
+| `Capabilities`                                                | Evaluate, approve and separately publish reusable code              |
 
 See the [API guide](docs/api.md) · [MCP connections](docs/mcp.md), [deployment guide](docs/deployment.md), and
 [implementation ledger](docs/implementation.md). Packages currently export workspace

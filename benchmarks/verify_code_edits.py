@@ -57,6 +57,11 @@ try:
 except Exception as error:
     report["error"] = str(error)
 finally:
+    report["finalStatus"] = (
+        "promoted"
+        if "review" in report
+        else report.get("learning", {}).get("run", {}).get("status", "inconclusive")
+    )
     report["wallSeconds"] = time.monotonic() - client.started
     path.write_text(json.dumps(report, indent=2))
 print(
@@ -64,7 +69,7 @@ print(
         {
             "proof": str(path),
             "assessment": report.get("assessment"),
-            "status": report.get("learning", {}).get("run", {}).get("status"),
+            "status": report["finalStatus"],
             "usage": report.get("learning", {}).get("usage"),
             "error": report.get("error"),
         }

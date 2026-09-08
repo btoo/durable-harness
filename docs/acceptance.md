@@ -20,5 +20,8 @@ packet are not complete. This register separates observed behavior from remainin
 | Release          | Public repository and isolated deployed resources                                                                                                                                 | Recordly capture, MP4/README asset, final release packet                                                                                                 |
 
 No private observation evidence may enter the public repository or public deployment.
-The first learning study found no quality advantage over Codemode + GEPA. Further
+Both learning studies found no quality advantage over Codemode + GEPA. The sequential
+study exposed repeated model timeouts and a production-bundling defect; the latter now
+passes the original deployed recovery cases. An optional source-edit follow-up passed
+12/12 held-out cases, with no matched speed or quality claim. Further
 architectural expansion should be justified by representative integration/recovery evidence.

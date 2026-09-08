@@ -1,0 +1,283 @@
+{
+  "date": "2026-09-08",
+  "evidence": "synthetic",
+  "model": "@cf/zai-org/glm-5.3-flash",
+  "gepaVersion": "0.1.4",
+  "learning": {
+    "sourceRevision": "57be6be1600ed9a94fa8048df405091f852d0adb",
+    "workerVersion": "c81857f3-57d1-4d6b-ad2a-b5795de2e043",
+    "runs": [
+      {
+        "mode": "disabled",
+        "repetition": 0,
+        "status": "completed",
+        "heldout": "3/12",
+        "modelSteps": 0,
+        "knownReportedTokens": 0,
+        "unsettledReservations": 0,
+        "stagesWithoutUsageReceipt": 0,
+        "activeSeconds": 0.0,
+        "wallSeconds": 6.448,
+        "syntheticReviews": 0,
+        "stagesWithUnappliedChanges": 0,
+        "error": null
+      },
+      {
+        "mode": "harness",
+        "repetition": 0,
+        "status": "completed",
+        "heldout": "8/12",
+        "modelSteps": 2,
+        "knownReportedTokens": 5137,
+        "unsettledReservations": 16625,
+        "stagesWithoutUsageReceipt": 0,
+        "activeSeconds": 208.769,
+        "wallSeconds": 213.792,
+        "syntheticReviews": 1,
+        "stagesWithUnappliedChanges": 1,
+        "error": null
+      },
+      {
+        "mode": "gepa",
+        "repetition": 0,
+        "status": "completed",
+        "heldout": "8/12",
+        "modelSteps": 2,
+        "knownReportedTokens": 7273,
+        "unsettledReservations": 29618,
+        "stagesWithoutUsageReceipt": 0,
+        "activeSeconds": 234.993,
+        "wallSeconds": 241.465,
+        "syntheticReviews": 1,
+        "stagesWithUnappliedChanges": 1,
+        "error": null
+      },
+      {
+        "mode": "harness",
+        "repetition": 1,
+        "status": "completed",
+        "heldout": "3/12",
+        "modelSteps": 2,
+        "knownReportedTokens": 0,
+        "unsettledReservations": 28447,
+        "stagesWithoutUsageReceipt": 0,
+        "activeSeconds": 240.001,
+        "wallSeconds": 245.14,
+        "syntheticReviews": 0,
+        "stagesWithUnappliedChanges": 2,
+        "error": null
+      },
+      {
+        "mode": "gepa",
+        "repetition": 1,
+        "status": "completed",
+        "heldout": "3/12",
+        "modelSteps": 2,
+        "knownReportedTokens": 0,
+        "unsettledReservations": 45097,
+        "stagesWithoutUsageReceipt": 0,
+        "activeSeconds": 240.001,
+        "wallSeconds": 245.396,
+        "syntheticReviews": 0,
+        "stagesWithUnappliedChanges": 2,
+        "error": null
+      },
+      {
+        "mode": "disabled",
+        "repetition": 1,
+        "status": "completed",
+        "heldout": "3/12",
+        "modelSteps": 0,
+        "knownReportedTokens": 0,
+        "unsettledReservations": 0,
+        "stagesWithoutUsageReceipt": 0,
+        "activeSeconds": 0.0,
+        "wallSeconds": 4.258,
+        "syntheticReviews": 0,
+        "stagesWithUnappliedChanges": 0,
+        "error": null
+      }
+    ],
+    "conclusion": "No quality advantage observed. Both approaches passed 8/12 then 3/12 held-out cases; six of eight learning stages timed out before a candidate was available."
+  },
+  "recovery": {
+    "sourceRevision": "677aa6889d8a6dbcccdc3bde81cd009d9ea5076d",
+    "workerVersion": "937e2d0a-f04a-480c-96ad-4de843f49df5",
+    "runs": [
+      {
+        "mode": "harness",
+        "candidateOrigin": "harness",
+        "modelGenerated": true,
+        "repetition": 0,
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "a874fed60f450c418d4f86d97a1039e2a23aa14e391d5314e8c5771ac421cd2f",
+        "wallSeconds": 4.523403208000673
+      },
+      {
+        "mode": "filesystem",
+        "candidateOrigin": "harness",
+        "modelGenerated": true,
+        "repetition": 0,
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "a874fed60f450c418d4f86d97a1039e2a23aa14e391d5314e8c5771ac421cd2f",
+        "wallSeconds": 4.555333958000119
+      },
+      {
+        "mode": "harness",
+        "candidateOrigin": "gepa",
+        "modelGenerated": true,
+        "repetition": 0,
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "1d4bc95e5c145d5b23ba8d24e4fc25472f96e93357388e8cb2a8a8e3e8577778",
+        "wallSeconds": 2.7869215840000834
+      },
+      {
+        "mode": "filesystem",
+        "candidateOrigin": "gepa",
+        "modelGenerated": true,
+        "repetition": 0,
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "1d4bc95e5c145d5b23ba8d24e4fc25472f96e93357388e8cb2a8a8e3e8577778",
+        "wallSeconds": 1.839948083001218
+      },
+      {
+        "mode": "harness",
+        "candidateOrigin": "harness",
+        "modelGenerated": false,
+        "repetition": 1,
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "123e6f1a4fd49fc59cb49bd68314ce59256187b37284afc7e8522425ed7308e4",
+        "wallSeconds": 1.941860667000583
+      },
+      {
+        "mode": "filesystem",
+        "candidateOrigin": "harness",
+        "modelGenerated": false,
+        "repetition": 1,
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "123e6f1a4fd49fc59cb49bd68314ce59256187b37284afc7e8522425ed7308e4",
+        "wallSeconds": 1.9973100839997642
+      },
+      {
+        "mode": "harness",
+        "candidateOrigin": "gepa",
+        "modelGenerated": false,
+        "repetition": 1,
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "123e6f1a4fd49fc59cb49bd68314ce59256187b37284afc7e8522425ed7308e4",
+        "wallSeconds": 1.8961649169978045
+      },
+      {
+        "mode": "filesystem",
+        "candidateOrigin": "gepa",
+        "modelGenerated": false,
+        "repetition": 1,
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "123e6f1a4fd49fc59cb49bd68314ce59256187b37284afc7e8522425ed7308e4",
+        "wallSeconds": 2.555323083000985
+      }
+    ],
+    "conclusion": "Both runtimes passed. Four cases use generated code and four use unchanged-seed controls. Each performed one input read, one effect and one reconciliation."
+  },
+  "earlierFailures": [
+    "The first GEPA setup requested instructions rather than code. That batch was stopped and excluded from optimizer comparisons.",
+    "Production-bundled cells failed with an undefined __name helper. The filesystem comparator passed. Runtime-source generation fixed the reproduced bundling defect.",
+    "The first edit follow-up request reached the preceding Worker version during deployment propagation and executed no model step. Follow-up scripts now check the required deployment ID."
+  ],
+  "limitations": [
+    "Small synthetic suite; no significance claim",
+    "Review is an explicit automated fixture, not measured human judgment",
+    "Supplied tool API and schemas; no autonomous connector creation",
+    "Shared sandbox evaluation; persistence/recovery assessed separately",
+    "Scenario families are hand-authored, not customer-derived independent datasets",
+    "Provider receipts share actor storage in this synthetic fixture",
+    "Filesystem path includes explicit developer-authored checkpoints and idempotency",
+    "No human integration-time measurement",
+    "Model does not participate during injected recovery",
+    "Reported tokens exclude unresolved provider usage; token reservations are not a bill.",
+    "These results do not measure human integration, review effort, or production outcomes."
+  ],
+  "editFollowup": {
+    "sourceRevision": "677aa6889d8a6dbcccdc3bde81cd009d9ea5076d",
+    "workerVersion": "937e2d0a-f04a-480c-96ad-4de843f49df5",
+    "validationBefore": "5/8",
+    "validationAfter": "8/8",
+    "heldoutBefore": "8/12",
+    "heldoutAfter": "12/12",
+    "modelSteps": 1,
+    "reportedTokens": 5722,
+    "activeSeconds": 74.86,
+    "reviewedRevision": 2,
+    "candidateHash": "5c9aab088bbddf8ef8ed06ff53d645e40afcb3110d2df8704dc8779c40d6b22e",
+    "limitation": "An additional attempt with a different representation; no causal speed or quality advantage established.",
+    "recovery": [
+      {
+        "mode": "harness",
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "f40b880070c74928be4237920794c369d6a32a0a6d57ed3a8f8f68092219a10f",
+        "modelGenerated": true
+      },
+      {
+        "mode": "filesystem",
+        "status": "passed",
+        "counts": {
+          "reads": 1,
+          "effects": 1,
+          "reconciliations": 1
+        },
+        "sourceHash": "f40b880070c74928be4237920794c369d6a32a0a6d57ed3a8f8f68092219a10f",
+        "modelGenerated": true
+      }
+    ],
+    "recoveredRecommendation": {
+      "supplier": "Brook",
+      "totalUsd": 76.8,
+      "approvalRequired": true
+    }
+  }
+}

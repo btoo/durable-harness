@@ -41,6 +41,10 @@ Cloudflare AI binding, and a finite root budget. UI exercises are explicitly det
 
 ## The programming model
 
+A **cell** is a block of TypeScript executed as one unit against a workspace.
+After successful execution, its supported named values and helper functions are
+committed durably for later cells to use, including after a restart.
+
 An agent writes a TypeScript cell using discoverable capabilities:
 
 ```ts

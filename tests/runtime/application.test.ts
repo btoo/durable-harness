@@ -25,6 +25,108 @@ async function command(cookie: string, body: object, workspace = "northstar-quot
 }
 
 describe("authenticated reference application", () => {
+  it("imports an allowed MCP, gates execution through approval, and enforces revocation", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).origin !== "https://fixture.example.test")
+        throw new Error("Unexpected outbound request");
+      if (request.method === "GET") return new Response(null, { status: 405 });
+      const message = (await request.json()) as { id?: number; method: string };
+      if (message.id === undefined) return new Response(null, { status: 202 });
+      const result =
+        message.method === "initialize"
+          ? {
+              protocolVersion: "2025-11-25",
+              capabilities: { tools: {} },
+              serverInfo: { name: "synthetic", version: "1" },
+            }
+          : message.method === "tools/list"
+            ? {
+                tools: [
+                  {
+                    name: "lookup",
+                    description: "Read a synthetic price",
+                    inputSchema: {
+                      type: "object",
+                      properties: { part: { type: "string" } },
+                      required: ["part"],
+                    },
+                  },
+                ],
+              }
+            : message.method === "tools/call"
+              ? (calls++,
+                {
+                  content: [{ type: "text", text: "Part A-1 costs 12." }],
+                  structuredContent: { price: 12 },
+                })
+              : {};
+      return Response.json({ jsonrpc: "2.0", id: message.id, result });
+    });
+    try {
+      const cookie = await session();
+      const add = {
+        action: "mcp-add",
+        name: "Supplier catalog",
+        auth: "none",
+        url: "https://fixture.example.test/mcp",
+      };
+      expect(
+        (await command(cookie, { ...add, url: "https://unapproved.example/mcp" })).status,
+      ).toBe(403);
+      const response = await command(cookie, add);
+      expect(response.status, await response.clone().text()).toBe(200);
+      const connection = (await response.json()) as {
+        id: string;
+        fingerprint: string;
+        state: string;
+      };
+      expect(connection.state).toBe("ready");
+      const invoke = {
+        action: "mcp-call",
+        connectionId: connection.id,
+        tool: "lookup",
+        input: { part: "A-1" },
+      };
+      expect((await command(cookie, invoke)).status).toBe(404);
+      expect(
+        (
+          await command(cookie, {
+            action: "mcp-grant",
+            connectionId: connection.id,
+            tools: ["lookup"],
+            fingerprint: connection.fingerprint,
+          })
+        ).status,
+      ).toBe(200);
+      expect((await command(cookie, invoke)).status).toBe(200);
+      expect(calls).toBe(0);
+      const action = (await state(cookie)).pending[0]!;
+      const approved = await command(cookie, { action: "approve", operationId: action.id });
+      expect(approved.status, await approved.clone().text()).toBe(200);
+      expect(calls).toBe(1);
+      const other = await session("cedar", cookie);
+      expect(
+        (
+          await command(
+            other,
+            { action: "mcp-revoke", connectionId: connection.id },
+            "cedar-quoting",
+          )
+        ).status,
+      ).toBe(404);
+      const owner = await session("northstar", other);
+      expect(
+        (await command(owner, { action: "mcp-revoke", connectionId: connection.id })).status,
+      ).toBe(200);
+      expect((await command(owner, invoke)).status).toBe(404);
+      expect(calls).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("retains code, bindings and original history after compaction and an actual runtime restart", async () => {
     const cookie = await session("developer");
     await command(cookie, { action: "run-synthetic" });
@@ -81,6 +183,12 @@ describe("authenticated reference application", () => {
       },
       body: JSON.stringify({ action: "seed-history" }),
     });
+    const requestId = crypto.randomUUID();
+    const requestBody = {
+      action: "model",
+      requestId,
+      message: "Create retained evidence notes and a reusable helper.",
+    };
     const response = await SELF.fetch("https://demo.test/api/command?workspace=northstar-quoting", {
       method: "POST",
       headers: {
@@ -88,12 +196,22 @@ describe("authenticated reference application", () => {
         "content-type": "application/json",
         authorization: "Bearer test-only-model-admission",
       },
-      body: JSON.stringify({
-        action: "model",
-        message: "Create retained evidence notes and a reusable helper.",
-      }),
+      body: JSON.stringify(requestBody),
     });
     expect(response.status).toBe(200);
+    const duplicate = await SELF.fetch(
+      "https://demo.test/api/command?workspace=northstar-quoting",
+      {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          authorization: "Bearer test-only-model-admission",
+        },
+        body: JSON.stringify(requestBody),
+      },
+    );
+    expect(((await duplicate.json()) as { rootId: string }).rootId).toBe(requestId);
     await vi.waitFor(
       async () => {
         const snapshot = await state(cookie);
@@ -118,6 +236,14 @@ describe("authenticated reference application", () => {
       ),
     ).toBe(true);
     expect(snapshot.runs?.[0]?.steps).toBe(3);
+    expect(snapshot.runs).toHaveLength(1);
+    const streamed = snapshot.events
+      .filter((event) => event.kind === "model.delta")
+      .map((event) => event.text)
+      .join("");
+    expect(streamed).toBe(
+      snapshot.history.find((item) => item.id === `${requestId}:assistant`)?.text,
+    );
   });
   it("enforces tenant and developer boundaries on the actual HTTP paths", async () => {
     const cookie = await session();

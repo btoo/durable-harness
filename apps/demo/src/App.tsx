@@ -10,6 +10,7 @@ import {
   FileText,
   GitBranch,
   Layers3,
+  Link2,
   LockKeyhole,
   MessageSquare,
   Package,
@@ -28,9 +29,13 @@ import {
   type DemoState,
   type Persona,
 } from "./api.js";
+import { Connections } from "./Connections.js";
+import { ModelRun } from "./ModelRun.js";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { HarnessEvent } from "@durable-harness/core";
 
-type View = "activity" | "workspace" | "learning";
+type View = "activity" | "workspace" | "learning" | "connections";
 const time = (value: string) =>
   new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(
     new Date(value),
@@ -40,10 +45,13 @@ export function App() {
   const [data, setData] = useState<DemoState>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState<View>("activity");
+  const [view, setView] = useState<View>(() =>
+    new URLSearchParams(location.search).get("view") === "connections" ? "connections" : "activity",
+  );
   const [connection, setConnection] = useState("Connecting");
   const [showCorrection, setShowCorrection] = useState(false);
   const generation = useRef(0);
+  const selection = useRef<string | undefined>(undefined);
   const cursor = useRef(0);
   const load = useCallback(async (workspaceId?: string) => {
     const current = ++generation.current;
@@ -52,11 +60,12 @@ export function App() {
     );
     if (current === generation.current) {
       cursor.current = state.events.at(-1)?.sequence ?? 0;
+      selection.current = state.selected;
       setData(state);
     }
   }, []);
   useEffect(() => {
-    load().catch(async () => {
+    load(new URLSearchParams(location.search).get("workspace") ?? undefined).catch(async () => {
       try {
         await setPersona("northstar");
         await load();
@@ -82,7 +91,7 @@ export function App() {
         setConnection("Live");
       };
       socket.onmessage = (event) => {
-        if (event.data === "pong") return;
+        if (event.data === "pong" || disposed || selection.current !== workspaceId) return;
         const record = JSON.parse(event.data) as HarnessEvent;
         cursor.current = Math.max(cursor.current, record.sequence);
         setData((current) =>
@@ -100,6 +109,8 @@ export function App() {
             "cell.committed",
             "learning.promoted",
             "model.completed",
+            "model.failed",
+            "model.interrupted",
             "action.awaiting_approval",
           ].includes(record.kind)
         )
@@ -120,12 +131,12 @@ export function App() {
     };
   }, [data?.selected, data?.persona, load]);
 
-  async function perform(value: DemoCommand) {
+  async function perform(value: DemoCommand, operatorToken?: string) {
     if (!data) return;
     setBusy(true);
     setError("");
     try {
-      await command(data.selected, value);
+      await command(data.selected, value, operatorToken);
       await load(data.selected);
       setShowCorrection(false);
     } catch (error) {
@@ -138,6 +149,9 @@ export function App() {
     setBusy(true);
     setError("");
     setView("activity");
+    generation.current++;
+    selection.current = undefined;
+    setData(undefined);
     try {
       await setPersona(persona);
       await load();
@@ -177,6 +191,7 @@ export function App() {
               className={`workspace-link ${data.selected === workspace.id ? "selected" : ""}`}
               onClick={() => {
                 setError("");
+                selection.current = workspace.id;
                 setShowCorrection(false);
                 void load(workspace.id).catch((error) => setError(String(error)));
               }}
@@ -305,6 +320,14 @@ export function App() {
                 <span className="count">{data.proposals.length}</span>
               ) : null}
             </button>
+            <button
+              role="tab"
+              aria-selected={view === "connections"}
+              onClick={() => setView("connections")}
+            >
+              <Link2 size={16} />
+              Connections
+            </button>
           </div>
           {error ? (
             <div className="error-banner" role="alert">
@@ -373,17 +396,28 @@ export function App() {
                       </button>
                     </div>
                   </section>
+                  {developer && data ? (
+                    <ModelRun data={data} busy={busy} perform={perform} />
+                  ) : null}
                   {data?.pending.map((action) => (
                     <section className="panel approval" key={action.id}>
                       <span className="eyebrow">YOUR APPROVAL</span>
-                      <h2>Review the supplier message</h2>
+                      <h2>
+                        {action.tool.startsWith("mcp.")
+                          ? "Review the connected tool action"
+                          : "Review the supplier message"}
+                      </h2>
                       <pre className="message-preview">
                         {String(
                           (action.input as { body?: string }).body ??
                             JSON.stringify(action.input, null, 2),
                         )}
                       </pre>
-                      <p className="caption">This exercise uses a synthetic email provider.</p>
+                      <p className="caption">
+                        {action.tool.startsWith("mcp.")
+                          ? "The connected server will receive these approved inputs."
+                          : "This exercise uses a synthetic email provider."}
+                      </p>
                       <div className="button-row">
                         <button
                           className="primary"
@@ -416,6 +450,13 @@ export function App() {
                 </>
               ) : view === "workspace" && developer && data ? (
                 <Workspace data={data} busy={busy} perform={(value) => void perform(value)} />
+              ) : view === "connections" && data ? (
+                <Connections
+                  key={`${data.persona}:${data.selected}`}
+                  data={data}
+                  busy={busy}
+                  perform={perform}
+                />
               ) : data ? (
                 <Learning data={data} />
               ) : null}
@@ -465,7 +506,7 @@ export function App() {
               <div className="demo-note">
                 <Circle size={13} />
                 <p>
-                  <strong>Deterministic exercise</strong>
+                  <strong>Synthetic business data</strong>
                   <br />
                   Synthetic suppliers and orders. The runtime, saved state, approvals, and tests are
                   real. Model-generated runs are labeled separately.
@@ -522,7 +563,22 @@ function ActivityFeed({ events, developer }: { events: HarnessEvent[]; developer
               {event.audience === "developer" ? <span className="tiny-tag">DEV</span> : null}
               <time>{time(event.createdAt)}</time>
             </div>
-            <p>{text}</p>
+            <div className="markdown">
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                skipHtml
+                components={{
+                  a: ({ children, ...props }) => (
+                    <a {...props} target="_blank" rel="noopener noreferrer">
+                      {children}
+                    </a>
+                  ),
+                  img: () => null,
+                }}
+              >
+                {text}
+              </Markdown>
+            </div>
             {developer ? (
               <span className="event-code">
                 {event.kind} · #{event.sequence}
@@ -586,7 +642,7 @@ function Correction({
     >
       <span className="eyebrow">TEACH YOUR AGENT</span>
       <h2>Add a customer correction</h2>
-      <label htmlFor="correction">What should change?</label>
+      <label htmlFor="correction">Describe why this preference should apply</label>
       <textarea
         id="correction"
         value={text}

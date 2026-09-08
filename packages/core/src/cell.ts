@@ -33,14 +33,17 @@ export class DurableWorkspace {
   readonly access: AccessPolicy;
   readonly history: History;
   readonly events: EventLog;
-  private readonly tools = new Map<string, ToolDefinition>();
+  private readonly toolDefinitions: () => ToolDefinition[];
+  private get tools() {
+    return new Map(this.toolDefinitions().map((tool) => [tool.name, tool]));
+  }
   private readonly active = new Set<string>();
 
   constructor(
     readonly store: RecordStore,
     private readonly executor: CellExecutor,
     options: {
-      tools?: ToolDefinition[];
+      tools?: ToolDefinition[] | (() => ToolDefinition[]);
       memory?: Memory;
       artifacts?: Artifacts;
       publish?: ConstructorParameters<typeof EventLog>[1];
@@ -53,7 +56,8 @@ export class DurableWorkspace {
     this.beforeOperation = options.beforeOperation;
     this.memory = options.memory ?? new Memory(store);
     this.artifacts = options.artifacts;
-    for (const tool of options.tools ?? []) this.tools.set(tool.name, tool);
+    const tools = options.tools ?? [];
+    this.toolDefinitions = typeof tools === "function" ? tools : () => tools;
   }
   private readonly beforeOperation: (() => Promise<void>) | undefined;
   private readonly memory: Memory;
@@ -427,6 +431,13 @@ export class DurableWorkspace {
           throw fault;
         }
       });
+      invariant(
+        !this.store
+          .list<OperationRecord>("operations")
+          .some((operation) => operation.cellId === id && operation.sequence > sequence),
+        "REPLAY_DIVERGENCE",
+        "This replay omitted a recorded operation. The workspace was not committed; inspect the execution journal.",
+      );
       invariant(
         result && typeof result === "object" && "graph" in result,
         "INVALID_CELL",

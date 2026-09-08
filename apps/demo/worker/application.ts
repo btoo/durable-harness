@@ -1,8 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { getAgentByName } from "agents";
+import { Lifecycle } from "agents/lifecycle";
+import { MCPClientManager } from "agents/mcp/client";
 import {
   Artifacts,
   ContextManager,
+  DEFAULT_RUN_LIMITS,
+  Connections,
   DurableWorkspace,
   HarnessFault,
   Learning,
@@ -19,7 +23,16 @@ import {
   type Principal,
   type RootRun,
 } from "@durable-harness/core";
-import { CloudflareCellExecutor, R2Artifacts, durableStore } from "@durable-harness/cloudflare";
+import {
+  CloudflareCellExecutor,
+  CloudflareMcpTransport,
+  EncryptedSecrets,
+  EncryptedCredentialVault,
+  cloudflareOAuthProvider,
+  R2Artifacts,
+  durableStore,
+  modelData,
+} from "@durable-harness/cloudflare";
 import {
   DEMO_DEPLOYMENT,
   domainTools,
@@ -50,6 +63,24 @@ interface Subscription {
 export class DemoApplication extends DurableObject<DemoEnv> {
   private readonly instanceId = crypto.randomUUID();
   private readonly records = durableStore(this.ctx);
+  private readonly secrets = new EncryptedSecrets(this.records, this.env.CREDENTIAL_KEY);
+  private readonly authProvider = (callback: string) =>
+    cloudflareOAuthProvider(this.secrets, this.ctx.id.toString(), callback);
+  private readonly mcpManager = new MCPClientManager("durable-harness", "0.1.0", {
+    createAuthProvider: (callback) => this.authProvider(callback),
+  });
+  private readonly mcpLifecycle = new Lifecycle(this).use(this.mcpManager);
+  private readonly mcpTransport = new CloudflareMcpTransport(this.mcpManager, {
+    start: () => this.mcpLifecycle.start(),
+    callbackUrl: (id) =>
+      `${this.records.get<string>("metadata", "mcp-origin")}/api/mcp/callback/${id}`,
+    authProvider: (callback) => this.authProvider(callback),
+  });
+  private readonly connections = new Connections(
+    this.records,
+    new EncryptedCredentialVault(this.secrets),
+    this.mcpTransport,
+  );
   private readonly memory = new Memory(this.records);
   private readonly learning = new Learning(this.records, [preferencesTarget()]);
   private readonly budgets = new RunBudgets(this.records);
@@ -57,7 +88,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.records,
     new CloudflareCellExecutor(this.env.LOADER),
     {
-      tools: domainTools(this.records),
+      tools: () => [...domainTools(this.records), ...this.connections.capabilities()],
       memory: this.memory,
       artifacts: new Artifacts(this.records, new R2Artifacts(this.env.ARTIFACTS)),
       publish: (event) => this.publish(event),
@@ -160,6 +191,17 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       workspaces: visible,
       selected,
       evidence: "synthetic" as const,
+      model: { id: this.env.MODEL_ID, limits: DEFAULT_RUN_LIMITS },
+      connections: this.connections.list(principal, selected).map((connection) => {
+        const { authorizationUrl, ...publicConnection } = connection;
+        return {
+          ...publicConnection,
+          ...(connection.ownerId === principal.id && authorizationUrl ? { authorizationUrl } : {}),
+        };
+      }),
+      connectionPolicy: {
+        allowedOrigins: (this.env.MCP_ALLOWED_ORIGINS ?? "").split(",").filter(Boolean),
+      },
       events: this.workspace.events.read(principal, selected),
       history: this.workspace.history.list(principal, selected),
       pending,
@@ -226,11 +268,19 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     workspaceId: string,
     command: DemoCommand,
     realModelAllowed: boolean,
+    transportOrigin?: string,
   ) {
     try {
       return {
         ok: true as const,
-        value: await this.command(sandbox, persona, workspaceId, command, realModelAllowed),
+        value: await this.command(
+          sandbox,
+          persona,
+          workspaceId,
+          command,
+          realModelAllowed,
+          transportOrigin,
+        ),
       };
     } catch (error) {
       return { ok: false as const, error: asFault(error).toJSON() };
@@ -243,10 +293,77 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     workspaceId: string,
     command: DemoCommand,
     realModelAllowed = false,
+    transportOrigin?: string,
   ) {
     this.seed();
     const principal = principalFor(persona);
     this.workspace.access.require(principal, workspaceId, "write");
+    if (command.action === "mcp-add") {
+      invariant(
+        transportOrigin,
+        "INVALID_INPUT",
+        "Connect MCP servers through the authenticated application transport.",
+      );
+      invariant(
+        (this.env.MCP_ALLOWED_ORIGINS ?? "").split(",").includes(new URL(command.url).origin),
+        "ACCESS_DENIED",
+        "This MCP origin is not enabled by the deployment's connection policy.",
+      );
+      const previousOrigin = this.records.get<string>("metadata", "mcp-origin");
+      invariant(
+        !previousOrigin || previousOrigin === transportOrigin,
+        "INVALID_INPUT",
+        "Authorize this connection from its original application origin.",
+      );
+      this.records.put("metadata", "mcp-origin", transportOrigin);
+      invariant(
+        command.auth !== "bearer" || command.accessToken,
+        "INVALID_INPUT",
+        "Enter the service token for this connection.",
+      );
+      const connected = await this.connections.add(
+        principal,
+        { spaceId: workspaceId, name: command.name, url: command.url, auth: command.auth },
+        command.accessToken ? { accessToken: command.accessToken } : undefined,
+      );
+      this.connectionEvent(workspaceId, connected.id, connected.state);
+      return modelData(connected);
+    }
+    if (command.action.startsWith("mcp-")) {
+      const input = command as Extract<DemoCommand, { connectionId: string }>;
+      const connection = this.connections.read(principal, input.connectionId);
+      invariant(
+        connection.spaceId === workspaceId,
+        "ACCESS_DENIED",
+        "This connection belongs to another workspace.",
+      );
+      if (input.action === "mcp-discover") {
+        const result = await this.connections.discover(principal, input.connectionId);
+        this.connectionEvent(workspaceId, result.id, result.state);
+        return modelData(result);
+      }
+      if (input.action === "mcp-grant")
+        return modelData(
+          this.connections.allowTools(
+            principal,
+            input.connectionId,
+            input.tools,
+            input.fingerprint,
+          ),
+        );
+      if (input.action === "mcp-revoke") {
+        await this.connections.revoke(principal, input.connectionId);
+        this.connectionEvent(workspaceId, input.connectionId, "revoked");
+        return { revoked: true };
+      }
+      if (input.action === "mcp-call")
+        return this.execute(
+          principal,
+          workspaceId,
+          `const connectionResult = await tools.call(${JSON.stringify(`mcp.${connection.id}.${input.tool}`)}, ${JSON.stringify(input.input)});`,
+          crypto.randomUUID(),
+        );
+    }
     if (command.action === "seed-history") {
       invariant(
         persona === "developer" && realModelAllowed,
@@ -474,7 +591,8 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       this.budgets.complete(id);
       return { rootId: id, model: this.env.MODEL_ID, wire: result };
     }
-    const rootId = crypto.randomUUID();
+    invariant(command.action === "model", "INVALID_INPUT", "Choose a supported command.");
+    const rootId = command.requestId ?? crypto.randomUUID();
     // Customer-facing generation starts with the selected customer's authority.
     const principalId = workspaceId.startsWith("cedar") ? "cedar" : "northstar";
     const request: ModelRequest = {
@@ -484,7 +602,20 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       rootId,
       message: command.message,
     };
+    const previous = this.records.get<ModelRequest>("model_requests", rootId);
+    invariant(
+      !previous || JSON.stringify(previous) === JSON.stringify(request),
+      "INVALID_INPUT",
+      "This request identity already belongs to different work.",
+    );
+    const agent = await getAgentByName(
+      this.env.MODEL_AGENTS,
+      `${sandbox}:${workspaceId}:${principalId}`,
+    );
+    if (previous)
+      return { rootId, status: (await agent.run(request)).status, modelId: this.env.MODEL_ID };
     this.budgets.start(rootId);
+    this.budgets.pause(rootId);
     this.records.put("model_requests", rootId, request);
     this.workspace.history.append({
       id: rootId,
@@ -497,24 +628,51 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     });
     this.workspace.events.append({
       workspaceId,
-      kind: "model.started",
+      kind: "model.queued",
       audience: "customer",
-      text: "The agent is working on your request",
+      text: "Your request is queued; the agent will continue even if you close this page",
       data: { rootId, evidence: "real-model" },
       lineage: [],
     });
-    const agent = await getAgentByName(
-      this.env.MODEL_AGENTS,
-      `${sandbox}:${workspaceId}:${principalId}`,
-    );
-    this.ctx.waitUntil(
-      agent
-        .run(request)
-        .catch((error) => this.modelEvent(rootId, "failed", asFault(error).message)),
-    );
-    return { rootId, status: "running", modelId: this.env.MODEL_ID };
+    const submission = await agent.run(request);
+    return { rootId, status: submission.status, modelId: this.env.MODEL_ID };
   }
 
+  async mcpCallback(persona: Persona, url: string) {
+    try {
+      const connectionId = new URL(url).pathname.split("/").at(-1)!;
+      const principal = principalFor(persona);
+      const connection = this.connections.read(principal, connectionId);
+      invariant(
+        connection.ownerId === principal.id,
+        "ACCESS_DENIED",
+        "Complete authorization with the identity that owns this connection.",
+      );
+      invariant(connection.state !== "revoked", "ACCESS_DENIED", "This connection was revoked.");
+      this.workspace.access.require(principal, connection.spaceId, "write");
+      await this.mcpTransport.completeAuthorization(new Request(url), connectionId);
+      const current = await this.connections.discover(principal, connectionId);
+      this.connectionEvent(connection.spaceId, connectionId, current.state);
+      return { ok: true as const, workspaceId: connection.spaceId };
+    } catch (error) {
+      return { ok: false as const, error: asFault(error).toJSON() };
+    }
+  }
+  private connectionEvent(workspaceId: string, connectionId: string, state: string) {
+    this.workspace.events.append({
+      workspaceId,
+      kind: `connection.${state}`,
+      audience: "customer",
+      text:
+        state === "ready"
+          ? "The connection is ready; review which tools the agent may use"
+          : state === "revoked"
+            ? "Connection access has been revoked"
+            : "The connection needs attention; open Connections to continue",
+      data: { connectionId, state },
+      lineage: [],
+    });
+  }
   private async execute(principal: Principal, workspaceId: string, source: string, id: string) {
     try {
       return await this.workspace.execute(principal, workspaceId, source, { id });
@@ -620,6 +778,53 @@ export class DemoApplication extends DurableObject<DemoEnv> {
           .map((line) => line.slice(0, 300))
           .join("\n")}`,
     );
+  }
+  async modelActivate(rootId: string) {
+    const request = this.modelRequest(rootId);
+    this.budgets.resume(rootId);
+    this.workspace.events.append({
+      workspaceId: request.workspaceId,
+      kind: "model.started",
+      audience: "customer",
+      text: "The agent is working on your request",
+      data: { rootId, evidence: "real-model" },
+      lineage: [],
+    });
+    const run = this.budgets.read(rootId);
+    const remainingMs = run.limits.activeMs - run.activeMs;
+    invariant(
+      remainingMs > 0,
+      "BUDGET_EXCEEDED",
+      "This run has used its active execution budget. Its progress is retained.",
+    );
+    const deadline = Date.now() + remainingMs;
+    const currentAlarm = await this.ctx.storage.getAlarm();
+    if (currentAlarm === null || currentAlarm > deadline) await this.ctx.storage.setAlarm(deadline);
+    return { remainingMs };
+  }
+  async alarm() {
+    let nextDeadline = Infinity;
+    for (const run of this.records.list<RootRun>("root_runs")) {
+      if (run.status !== "active" || run.activeSince === null) continue;
+      const request = this.records.get<ModelRequest>("model_requests", run.id);
+      if (!request || this.records.get("model_terminals", run.id)) continue;
+      const deadline = run.activeSince + run.limits.activeMs - run.activeMs;
+      if (deadline > Date.now()) {
+        nextDeadline = Math.min(nextDeadline, deadline);
+        continue;
+      }
+      const agent = await getAgentByName(
+        this.env.MODEL_AGENTS,
+        `${request.sandbox}:${request.workspaceId}:${request.principalId}`,
+      );
+      await agent.cancelSubmission(run.id, "The root run reached its active execution budget.");
+      this.modelEvent(
+        run.id,
+        "failed",
+        "The root run reached its active execution budget; unsettled usage remains reserved.",
+      );
+    }
+    if (Number.isFinite(nextDeadline)) await this.ctx.storage.setAlarm(nextDeadline);
   }
   modelReserve(rootId: string, stepId: string, tokens: number) {
     this.modelRequest(rootId);

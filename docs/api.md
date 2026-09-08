@@ -103,7 +103,44 @@ state-schema migrations, and infrastructure deployment are not yet implemented.
 
 ## Current limitations
 
-Full MCP/OAuth integration, provider-native compaction, semantic history retrieval,
-multi-agent message orchestration, comparative benchmarks, and read-only observation
-remain under implementation. Each browser experiment uses one Durable Object containing
+Provider-native compaction, semantic history retrieval, multi-agent message orchestration,
+comparative benchmarks, and live HTTP observation verification remain under implementation.
+Each browser experiment uses one Durable Object containing
 its synthetic tenant spaces; scaling to thousands of tenants has not been demonstrated.
+
+## MCP connections
+
+`Connections` owns connection identities, capability grants, schema fingerprints, and
+readiness. `CloudflareMcpTransport` uses Cloudflare's `MCPClientManager`; its OAuth provider
+stores client registrations, PKCE material, and rotated tokens through `EncryptedSecrets`.
+The host installs the manager with `Lifecycle` and supplies its exact callback URL.
+
+Register a connection with `add(principal, {spaceId, name, url, auth}, credentials?)`.
+Complete OAuth as its owner, then explicitly grant discovered tools with
+`allowTools(principal, id, names, expectedFingerprint)`. Credentials stay in the host vault.
+Use `discover` to refresh readiness and `revoke` to remove connection access.
+
+Pass `tools: () => [...localTools, ...connections.capabilities()]` to `DurableWorkspace`.
+Imported tools participate in the same journal, live activity, approval, and replay checks.
+Their default policy treats them as external actions requiring approval. A developer-owned
+policy callback may classify verified read tools differently. OAuth preflight failures can
+pause before dispatch; failures after external dispatch retain an uncertain outcome.
+
+The reference UI exposes account authorization and tool grants to customers and developers.
+Set `MCP_ALLOWED_ORIGINS` to a comma-separated list of developer-approved origins.
+An empty list disables new connections. OAuth needs a provider supporting refresh tokens
+for unattended operation; the API reports the authorization's observed capability.
+
+## Durable model submissions
+
+The reference `model` command accepts an optional UUID `requestId`. Retry with the same ID
+and identical message to inspect the original admission rather than start another run.
+The server first persists the root request, then accepts it into Think's durable submission
+ledger. Only inference time counts against the active execution budget; queue and approval
+waits are paused. Root token reservations include instructions, schemas, rendered messages,
+and output headroom. Unknown usage after interruption remains reserved.
+
+Text batches enter a durable outbox before publication and are deduplicated in the
+application event log. A runtime alarm cancels submissions that exceed active-time limits.
+The real-model form requires the deployment's operator token; synthetic identity switching
+does not authorize paid inference.

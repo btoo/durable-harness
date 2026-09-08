@@ -1086,3 +1086,127 @@ footer {
     height: 27px;
   }
 }
+
+.connection-card {
+  border-top: 1px solid var(--line);
+  padding: 24px 0;
+  margin-top: 20px;
+}
+.connection-card:last-child {
+  padding-bottom: 0;
+}
+.connection-url {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.connection-facts {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 10px;
+  font-size: 12px;
+  margin: 20px 0;
+}
+.connection-facts dd {
+  margin: 0;
+}
+.connection-facts dt {
+  color: var(--muted);
+}
+.connection-form label,
+.model-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 550;
+  font-size: 12px;
+  margin: 18px 0 8px;
+}
+.connection-form input,
+.connection-form select,
+.model-form input {
+  display: block;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: inherit;
+}
+input:focus-visible {
+  outline: 3px solid #90bea6;
+  outline-offset: 2px;
+}
+.inline-button {
+  display: inline-flex;
+  margin-bottom: 16px;
+}
+.tool-grants {
+  border: 0;
+  padding: 18px 0;
+  margin: 0;
+}
+.tool-grants legend {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 20px 0 0;
+}
+.tool-grants label {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 0;
+}
+.tool-grants small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 5px;
+}
+.tool-grants input {
+  accent-color: var(--accent);
+  margin-top: 3px;
+}
+.model-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin: 16px 0 0;
+  overflow-wrap: anywhere;
+}
+.markdown {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.markdown p {
+  white-space: normal;
+}
+.markdown table {
+  display: block;
+  overflow: auto;
+  max-width: 100%;
+  font-size: 12px;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-size: 14px;
+  margin: 18px 0 10px;
+}
+.markdown a {
+  text-decoration: underline;
+  color: var(--accent);
+}
+.markdown pre {
+  background: #f5f6f3;
+  padding: 12px;
+  border-radius: 6px;
+}
+.markdown li {
+  padding: 0;
+}
+.tabs {
+  overflow-x: auto;
+}

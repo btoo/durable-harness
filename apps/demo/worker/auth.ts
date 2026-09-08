@@ -72,5 +72,5 @@ export async function readSession(request: Request, secret: string): Promise<Ses
   }
 }
 export function sessionCookie(token: string, url: URL): string {
-  return `dh_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
+  return `dh_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${url.protocol === "https:" ? "; Secure" : ""}`;
 }

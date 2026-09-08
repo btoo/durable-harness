@@ -39,9 +39,8 @@ export function invariant(condition: unknown, code: FaultCode, message: string):
 export function asFault(error: unknown): HarnessFault {
   if (error instanceof HarnessFault) return error;
   const message = error instanceof Error ? error.message : String(error);
-  const match = /^\[(\w+)\]\s*([\s\S]*)$/.exec(message);
-  return new HarnessFault(
-    (match?.[1] as FaultCode | undefined) ?? "INVALID_CELL",
-    match?.[2] ?? message,
-  );
+  // The self-contained graph codec can only return this diagnostic across a sandbox.
+  // Provider and user-controlled error strings must never manufacture a retry/approval state.
+  const match = /^\[UNSUPPORTED_VALUE\]\s*([\s\S]*)$/.exec(message);
+  return new HarnessFault(match ? "UNSUPPORTED_VALUE" : "INVALID_CELL", match?.[1] ?? message);
 }

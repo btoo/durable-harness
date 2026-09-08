@@ -48,6 +48,14 @@ export default {
       invariant(existing, "ACCESS_DENIED", "Start a demo session to open your workspaces.");
       const app = application(env, existing.sandbox);
       const workspaceId = url.searchParams.get("workspace") ?? undefined;
+      if (url.pathname.startsWith("/api/mcp/callback/") && request.method === "GET") {
+        const result = await app.mcpCallback(existing.persona, url.toString());
+        if (!result.ok) throw new HarnessFault(result.error.code, result.error.message);
+        return Response.redirect(
+          `${url.origin}/?workspace=${encodeURIComponent(result.workspaceId)}&view=connections`,
+          303,
+        );
+      }
       if (url.pathname === "/api/state" && request.method === "GET") {
         const result = await app.apiState(existing.persona, workspaceId);
         if (!result.ok) throw new HarnessFault(result.error.code, result.error.message);
@@ -115,6 +123,7 @@ export default {
           workspaceId,
           command,
           realModelAllowed,
+          url.origin,
         );
         if (!result.ok) throw new HarnessFault(result.error.code, result.error.message);
         return Response.json(result.value, { headers: { "cache-control": "no-store" } });

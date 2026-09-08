@@ -14,6 +14,7 @@ export interface DemoEnv {
   ADMIN_TOKEN: string;
   DEMO_MODE: string;
   MODEL_ID: string;
+  MCP_ALLOWED_ORIGINS?: string;
 }
 // Workers' RPC mapper cannot infer values that intentionally contain unknown data graphs.
 // Keep the concrete public method contract while letting the transport serialize values.
@@ -24,12 +25,14 @@ export type ApplicationStub = DurableObjectStub &
     | "command"
     | "apiState"
     | "apiCommand"
+    | "mcpCallback"
     | "prepareRestart"
     | "restartNow"
     | "subscribe"
     | "modelContext"
     | "modelBinding"
     | "modelPrepared"
+    | "modelActivate"
     | "modelReserve"
     | "modelSettle"
     | "modelStep"
@@ -42,6 +45,27 @@ export function application(env: DemoEnv, sandbox: string): ApplicationStub {
 export const personaSchema = z.enum(["northstar", "cedar", "developer"]);
 export type Persona = z.infer<typeof personaSchema>;
 export const commandSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("mcp-add"),
+    name: z.string().min(1).max(80),
+    url: z.string().url().max(2000),
+    auth: z.enum(["oauth", "bearer", "none"]),
+    accessToken: z.string().min(1).max(8000).optional(),
+  }),
+  z.object({ action: z.literal("mcp-discover"), connectionId: z.string().uuid() }),
+  z.object({ action: z.literal("mcp-revoke"), connectionId: z.string().uuid() }),
+  z.object({
+    action: z.literal("mcp-grant"),
+    connectionId: z.string().uuid(),
+    tools: z.array(z.string().min(1).max(200)).max(100),
+    fingerprint: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("mcp-call"),
+    connectionId: z.string().uuid(),
+    tool: z.string().min(1).max(200),
+    input: z.record(z.string(), z.unknown()),
+  }),
   z.object({ action: z.literal("run-synthetic") }),
   z.object({ action: z.literal("probe-model") }),
   z.object({ action: z.literal("seed-history") }),
@@ -62,7 +86,11 @@ export const commandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reject"), operationId: z.string().min(1) }),
   z.object({ action: z.literal("resume"), cellId: z.string().min(1) }),
   z.object({ action: z.literal("compact") }),
-  z.object({ action: z.literal("model"), message: z.string().min(1).max(8000) }),
+  z.object({
+    action: z.literal("model"),
+    message: z.string().min(1).max(8000),
+    requestId: z.string().uuid().optional(),
+  }),
 ]);
 export type DemoCommand = z.infer<typeof commandSchema>;
 export interface ModelRequest {

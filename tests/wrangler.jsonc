@@ -30,5 +30,6 @@
     "CREDENTIAL_KEY": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
     "MODEL_ID": "synthetic",
     "ADMIN_TOKEN": "test-only-model-admission",
+    "MCP_ALLOWED_ORIGINS": "https://fixture.example.test",
   },
 }

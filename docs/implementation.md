@@ -59,6 +59,17 @@
 - The first deployed recovery continuation exposed an AI SDK 7 message-role incompatibility
   after the actual restart succeeded. Portable checkpoints now enter the model as historical
   user evidence, with source roles retained, instead of unsupported system messages.
+- The next GLM recovery attempt retained the original data and helper through restart,
+  but reported neither a completed model step nor a terminal outcome within the verification
+  window. It is inconclusive; unknown token usage remains reserved.
+- Model turns now use Think's durable submission ledger with stable request identities,
+  protected request lookup, persisted stream batches, and a separate active-time alarm.
+  Local tests verify duplicate admission and stream/history parity.
+- Customer and developer connection screens use the real connection APIs. Imported tools
+  pass through cell approval and journaling; the HTTP regression checks origin policy,
+  cross-tenant denial, approved dispatch, and revocation. Live HTTPS proof is still pending.
+- Replay now rejects omitted journal entries before committing. Untrusted error strings
+  cannot manufacture authorization or resumable recovery states.
 
 ## Current verification
 

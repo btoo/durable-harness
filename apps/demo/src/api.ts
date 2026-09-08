@@ -17,10 +17,13 @@ export function setPersona(persona: Persona) {
     body: JSON.stringify({ persona }),
   });
 }
-export function command(workspaceId: string, value: DemoCommand) {
+export function command(workspaceId: string, value: DemoCommand, operatorToken?: string) {
   return request(`/api/command?workspace=${encodeURIComponent(workspaceId)}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(operatorToken ? { authorization: `Bearer ${operatorToken}` } : {}),
+    },
     body: JSON.stringify(value),
   });
 }

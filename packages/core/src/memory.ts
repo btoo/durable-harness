@@ -20,6 +20,8 @@ export interface SharingRule {
   sourceSpaceId: string;
   targetSpaceId: string;
   fields: string[];
+  title?: string;
+  kind?: MemoryEntry["kind"];
 }
 export interface MemoryWrite {
   id?: string;
@@ -164,7 +166,12 @@ export class Memory {
       const receiptId = crypto.randomUUID();
       const entry = this.write(
         principal,
-        { spaceId: targetSpaceId, title: source.title, kind: source.kind, value: projection },
+        {
+          spaceId: targetSpaceId,
+          title: rule ? (rule.title ?? `Shared knowledge: ${rule.id}`) : source.title,
+          kind: rule ? (rule.kind ?? "fact") : source.kind,
+          value: projection,
+        },
         [],
       );
       const published = { ...entry, publicationId: receiptId };

@@ -22,7 +22,7 @@ describe("scoped knowledge and compaction over real SQLite", () => {
       dev,
       {
         spaceId: "a",
-        title: "Normalize units",
+        title: "Private negotiated customer price",
         kind: "procedure",
         value: { lesson: "Convert units before comparing", negotiatedPrice: 37 },
       },
@@ -31,6 +31,7 @@ describe("scoped knowledge and compaction over real SQLite", () => {
     expect(() => memory.read(buyerB, original.id)).toThrow(/No accessible memory/);
     expect(() => memory.publish(dev, original.id, "shared")).toThrow(/policy or developer review/);
     const published = memory.publish(dev, original.id, "shared", { ruleId: "technical-lesson" });
+    expect(published.title).not.toBe(original.title);
     expect(decodeGraph(memory.read(buyerB, published.id).value).value).toEqual({
       lesson: "Convert units before comparing",
     });

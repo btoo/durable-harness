@@ -19,7 +19,7 @@
   "worker_loaders": [{ "binding": "LOADER" }],
   "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "durable-harness-artifacts" }],
   "ai": { "binding": "AI" },
-  "vars": { "DEMO_MODE": "synthetic", "MODEL_ID": "@cf/moonshotai/kimi-k2.7-code" },
+  "vars": { "DEMO_MODE": "synthetic", "MODEL_ID": "@cf/zai-org/glm-5.3-flash" },
   "limits": { "cpu_ms": 30000 },
   "observability": { "enabled": false },
 }

@@ -80,6 +80,35 @@ export default {
         const command = commandSchema.parse(JSON.parse(body));
         const realModelAllowed =
           !!env.ADMIN_TOKEN && request.headers.get("authorization") === `Bearer ${env.ADMIN_TOKEN}`;
+        if (command.action === "restart-runtime") {
+          invariant(
+            realModelAllowed && existing.persona === "developer",
+            "ACCESS_DENIED",
+            "Restarting the runtime requires an authorized operator.",
+          );
+          const stamp = await app.prepareRestart(existing.persona, workspaceId);
+          try {
+            await app.restartNow(stamp.id);
+          } catch {
+            /* The platform terminates this RPC with the actor. */
+          }
+          const restored = await application(env, existing.sandbox).apiState(
+            existing.persona,
+            workspaceId,
+          );
+          if (!restored.ok) throw new HarnessFault(restored.error.code, restored.error.message);
+          invariant(
+            restored.value.runtimeInstanceId !== stamp.instanceId,
+            "INVALID_CELL",
+            "The runtime did not restart. Its saved state remains available.",
+          );
+          return Response.json({
+            restarted: true,
+            before: stamp.instanceId,
+            after: restored.value.runtimeInstanceId,
+            workspace: restored.value.workspace,
+          });
+        }
         const result = await app.apiCommand(
           existing.sandbox,
           existing.persona,

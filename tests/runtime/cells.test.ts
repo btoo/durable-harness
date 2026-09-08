@@ -15,11 +15,19 @@ type TestHost = DurableObjectStub &
     | "revoke"
     | "reconcile"
     | "changeToolVersion"
+    | "revokePrivate"
   >;
 const testEnv = env as unknown as { WORKSPACES: DurableObjectNamespace };
 const host = () => testEnv.WORKSPACES.getByName(crypto.randomUUID()) as TestHost;
 
 describe("code cells in real Dynamic Workers and Durable Object storage", () => {
+  it("rechecks acquired evidence restrictions before disclosing operation diagnostics", async () => {
+    const workspace = host();
+    const id = crypto.randomUUID();
+    await workspace.run('const restricted = await tools.call("private.lookup", {});', id);
+    await workspace.revokePrivate();
+    await expect((async () => await workspace.actions(id))()).rejects.toThrow("read");
+  });
   it("requires the reviewer to access evidence acquired during the pending cell", async () => {
     const workspace = host();
     const id = crypto.randomUUID();

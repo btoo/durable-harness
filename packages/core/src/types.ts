@@ -108,6 +108,7 @@ export interface RecordStore {
   list<T>(collection: string): T[];
   delete(collection: string, id: string): void;
   transaction<T>(fn: () => T): T;
+  afterCommit(fn: () => void): void;
   search?<T>(collection: string, query: string, allowedIds: string[], limit: number): T[];
 }
 export interface CellExecutor {

@@ -6,9 +6,9 @@
 - Initial scaffold pushed and read back at `425c35dfacfcfb34c2e0d51194cdf8b8208fa300`.
 - Core code under development: graph codec, lexical cell compiler, versioned helper modules,
   SQLite record store, permissions, history, operation journal, and event log.
-- Twenty-one unit tests pass over graph values, real SQLite, publication policy, scoped FTS,
+- Twenty-eight unit tests pass over graph values, real SQLite, publication policy, scoped FTS,
   compaction, evaluated learning, encrypted credentials, rotation/revocation, artifacts, and budgets.
-- Sixteen real Workers runtime tests pass: eviction recovery, approval/resume, helper version pins,
+- Eighteen real Workers runtime tests pass: eviction recovery, approval/resume, helper version pins,
   input validation, unsupported captures, revoked grants, stream/history parity, uncertain
   effects, replay divergence, retained memory/R2 artifact handles, HTTP role enforcement,
   customer correction impact, approval delivery, and WebSocket/history parity.
@@ -38,6 +38,18 @@
   test verifies that promotion cannot disclose restricted evidence to another customer.
 - Further real-model and recovery verification is in progress. There is no comparative
   effectiveness result yet.
+- Kimi K2.7 Code completed the generation proof in four steps, 17,281 reported tokens,
+  and 56.9 seconds. It created a quote-analysis structure and a reusable helper, corrected
+  a rejected non-journaled timestamp, and committed the data and function. This is a
+  single proof case, not a comparative benchmark.
+- Default inference switched at the user's request to `@cf/zai-org/glm-5.3-flash`.
+  Its published rates and the comparable proof limits are documented in the deployment guide.
+- Local runtime proof now covers compaction, exact original lookup, actual actor abort,
+  reconstruction through a fresh RPC stub, and reuse of retained data/functions.
+- Publication waits for the outer transaction to commit. Automatic sharing no longer copies
+  an unselected private title; operation diagnostics recheck acquired source restrictions.
+- A bounded private CDC sample and prompt original were retained outside Git. Live HTTP
+  collector verification and quoting observation coverage remain separate pending checks.
 
 ## Current verification
 

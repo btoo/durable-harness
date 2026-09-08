@@ -134,10 +134,15 @@ export class DurableWorkspace {
       "ACCESS_DENIED",
       "Operation diagnostics require developer access.",
     );
-    return this.store
+    const operations = this.store
       .list<OperationRecord>("operations")
       .filter((operation) => operation.cellId === cellId)
       .sort((a, b) => a.sequence - b.sequence);
+    this.access.requireSources(
+      principal,
+      operations.flatMap((operation) => operation.lineage ?? []),
+    );
+    return operations;
   }
 
   async execute(
@@ -576,17 +581,19 @@ export class DurableWorkspace {
       return builtin(async (input, context) => {
         const text = String((input as { text?: unknown })?.text ?? "").slice(0, 2000);
         // A progress message uses its operation identity so replay cannot publish it twice.
-        if (!this.store.get("progress", context.operationId)) {
-          this.events.append({
-            workspaceId,
-            kind: "message.completed",
-            audience: "customer",
-            text,
-            data: { operationId: context.operationId },
-            lineage: [...lineage],
-          });
-          this.store.put("progress", context.operationId, true);
-        }
+        this.store.transaction(() => {
+          if (!this.store.get("progress", context.operationId)) {
+            this.events.append({
+              workspaceId,
+              kind: "message.completed",
+              audience: "customer",
+              text,
+              data: { operationId: context.operationId },
+              lineage: [...lineage],
+            });
+            this.store.put("progress", context.operationId, true);
+          }
+        });
         return { recorded: true };
       }, "idempotent");
     if (name === "@history.search")

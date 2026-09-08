@@ -48,6 +48,7 @@ interface Subscription {
 
 /** Each browser experiment receives an isolated Durable Object with synthetic tenants. */
 export class DemoApplication extends DurableObject<DemoEnv> {
+  private readonly instanceId = crypto.randomUUID();
   private readonly records = durableStore(this.ctx);
   private readonly memory = new Memory(this.records);
   private readonly learning = new Learning(this.records, [preferencesTarget()]);
@@ -155,6 +156,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       }));
     return {
       persona,
+      runtimeInstanceId: this.instanceId,
       workspaces: visible,
       selected,
       evidence: "synthetic" as const,
@@ -245,6 +247,40 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.seed();
     const principal = principalFor(persona);
     this.workspace.access.require(principal, workspaceId, "write");
+    if (command.action === "seed-history") {
+      invariant(
+        persona === "developer" && realModelAllowed,
+        "ACCESS_DENIED",
+        "Long-history fixtures require an authorized operator.",
+      );
+      this.records.transaction(() => {
+        for (let index = 0; index < 80; index++)
+          this.workspace.history.append({
+            id: `${workspaceId}:history-fixture:${index}`,
+            workspaceId,
+            role: "assistant",
+            text:
+              `Synthetic archive note ${index}. ` +
+              "This historical fixture supports context-recovery testing. Supplier messages still require approval. ".repeat(
+                10,
+              ),
+            audience: "customer",
+            lineage: [],
+            metadata: { evidence: "synthetic", fixture: true },
+          });
+      });
+      this.workspace.events.append({
+        workspaceId,
+        kind: "context.fixture_added",
+        audience: "developer",
+        text: "Added 80 labeled synthetic archive entries for compaction testing",
+        data: { entries: 80 },
+        lineage: [],
+      });
+      return { entries: 80 };
+    }
+    if (command.action === "restart-runtime")
+      throw new HarnessFault("INVALID_INPUT", "Use the authenticated runtime restart transport.");
     if (command.action === "run-synthetic")
       return this.execute(principal, workspaceId, scenarioSource(workspaceId), crypto.randomUUID());
     if (command.action === "prepare-message")
@@ -407,7 +443,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       const id = crypto.randomUUID();
       this.budgets.start(id, { steps: 1, tokens: 4096, activeMs: 30_000, descendants: 1 });
       this.budgets.reserve(id, "probe", 4096);
-      const response = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+      const response = await this.env.AI.run(this.env.MODEL_ID as keyof AiModels, {
         messages: [{ role: "user", content: "Call the capture tool with the text alpha beta." }],
         tools: [
           {
@@ -436,7 +472,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         "The provider probe exceeded its output bound.",
       );
       this.budgets.complete(id);
-      return { rootId: id, model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", wire: result };
+      return { rootId: id, model: this.env.MODEL_ID, wire: result };
     }
     const rootId = crypto.randomUUID();
     // Customer-facing generation starts with the selected customer's authority.
@@ -488,6 +524,35 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         return { cellId: id, recovery: fault.toJSON() };
       throw error;
     }
+  }
+  async prepareRestart(persona: Persona, workspaceId: string) {
+    this.seed();
+    invariant(
+      persona === "developer",
+      "ACCESS_DENIED",
+      "A runtime restart requires developer access.",
+    );
+    this.workspace.access.require(principalFor(persona), workspaceId, "write");
+    const stamp = { id: crypto.randomUUID(), instanceId: this.instanceId, workspaceId };
+    this.records.put("metadata", "requested-restart", stamp);
+    this.workspace.events.append({
+      workspaceId,
+      kind: "runtime.restart_requested",
+      audience: "developer",
+      text: "An operator requested a runtime restart; committed state is retained",
+      data: { requestId: stamp.id },
+      lineage: [],
+    });
+    await this.ctx.storage.sync();
+    return stamp;
+  }
+  restartNow(id: string): void {
+    invariant(
+      this.records.get<{ id: string }>("metadata", "requested-restart")?.id === id,
+      "ACCESS_DENIED",
+      "No matching restart was prepared.",
+    );
+    this.ctx.abort("Synthetic runtime restart requested");
   }
   private async resume(principal: Principal, workspaceId: string, cellId: string) {
     const cell = this.records.get<CellRecord>("cells", cellId);

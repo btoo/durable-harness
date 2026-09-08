@@ -25,6 +25,51 @@ async function command(cookie: string, body: object, workspace = "northstar-quot
 }
 
 describe("authenticated reference application", () => {
+  it("retains code, bindings and original history after compaction and an actual runtime restart", async () => {
+    const cookie = await session("developer");
+    await command(cookie, { action: "run-synthetic" });
+    await command(cookie, {
+      action: "correct",
+      preference: "includeFreight",
+      text: "Customer exception: always include freight for RFQ-208.",
+    });
+    const before = await state(cookie);
+    const original = before.history.find((item) => item.metadata.kind === "correction")!;
+    const operator = async (body: object) =>
+      SELF.fetch("https://demo.test/api/command?workspace=northstar-quoting", {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          authorization: "Bearer test-only-model-admission",
+        },
+        body: JSON.stringify(body),
+      });
+    expect((await operator({ action: "seed-history" })).status).toBe(200);
+    const compacted = (await (await command(cookie, { action: "compact" })).json()) as {
+      receipt?: unknown;
+    };
+    expect(compacted.receipt).toBeDefined();
+    const restart = (await (await operator({ action: "restart-runtime" })).json()) as {
+      restarted?: boolean;
+      after: string;
+    };
+    expect(restart.restarted, JSON.stringify(restart)).toBe(true);
+    expect(restart.after).not.toBe(before.runtimeInstanceId);
+    const result = await command(cookie, {
+      action: "cell",
+      id: crypto.randomUUID(),
+      expectedRevision: 1,
+      source: `const originalCorrection = await history.read(${JSON.stringify(original.id)}); const restoredRanking = rankOffers(evidence.offers, true);`,
+    });
+    expect(result.status).toBe(200);
+    const restored = await state(cookie);
+    expect(restored.workspace?.bindings.some((binding) => binding.name === "restoredRanking")).toBe(
+      true,
+    );
+    expect(restored.history.find((item) => item.id === original.id)?.text).toBe(original.text);
+    expect(restored.workspace?.functions).toEqual(before.workspace?.functions);
+  });
   it("executes Think tool calls and persists the streamed response", async () => {
     const cookie = await session("developer");
     const response = await SELF.fetch("https://demo.test/api/command?workspace=northstar-quoting", {

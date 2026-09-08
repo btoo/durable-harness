@@ -24,6 +24,8 @@ export type ApplicationStub = DurableObjectStub &
     | "command"
     | "apiState"
     | "apiCommand"
+    | "prepareRestart"
+    | "restartNow"
     | "subscribe"
     | "modelContext"
     | "modelPrepared"
@@ -41,6 +43,8 @@ export type Persona = z.infer<typeof personaSchema>;
 export const commandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("run-synthetic") }),
   z.object({ action: z.literal("probe-model") }),
+  z.object({ action: z.literal("seed-history") }),
+  z.object({ action: z.literal("restart-runtime") }),
   z.object({ action: z.literal("prepare-message") }),
   z.object({
     action: z.literal("cell"),

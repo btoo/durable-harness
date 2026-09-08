@@ -134,11 +134,16 @@ export class EventLog {
       this.store.put("events", entry.id, entry);
       return entry;
     });
-    try {
-      this.publish?.(record);
-    } catch {
-      this.store.put("delivery_gaps", record.id, { eventId: record.id, sequence: record.sequence });
-    }
+    this.store.afterCommit(() => {
+      try {
+        this.publish?.(record);
+      } catch {
+        this.store.put("delivery_gaps", record.id, {
+          eventId: record.id,
+          sequence: record.sequence,
+        });
+      }
+    });
     return record;
   }
 

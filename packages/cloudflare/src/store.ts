@@ -7,6 +7,7 @@ export interface SqlDatabase {
 
 /** Small record store with real SQLite transactions and a persistent FTS5 index. */
 export class SqlRecordStore implements RecordStore {
+  private readonly commitFrames: (() => void)[][] = [];
   constructor(private readonly db: SqlDatabase) {
     db.exec(
       "CREATE TABLE IF NOT EXISTS dh_records (collection TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (collection, id))",
@@ -57,7 +58,25 @@ export class SqlRecordStore implements RecordStore {
       this.db.exec("DELETE FROM dh_search WHERE collection = ? AND id = ?", collection, id);
   }
   transaction<T>(fn: () => T): T {
-    return this.db.transaction(fn);
+    const callbacks: (() => void)[] = [];
+    this.commitFrames.push(callbacks);
+    let result: T;
+    try {
+      result = this.db.transaction(fn);
+    } catch (error) {
+      this.commitFrames.pop();
+      throw error;
+    }
+    this.commitFrames.pop();
+    const parent = this.commitFrames.at(-1);
+    if (parent) parent.push(...callbacks);
+    else for (const callback of callbacks) callback();
+    return result;
+  }
+  afterCommit(fn: () => void): void {
+    const frame = this.commitFrames.at(-1);
+    if (frame) frame.push(fn);
+    else fn();
   }
   search<T>(collection: string, query: string, allowedIds: string[], limit: number): T[] {
     if (!allowedIds.length) return [];

@@ -37,11 +37,14 @@ export class WorkspaceTestHost extends DurableObject<{
       ],
     };
     if (!this.store.get("spaces", "test")) this.store.put("spaces", "test", space);
-    this.store.put("spaces", "operator-private", {
-      ...space,
-      id: "operator-private",
-      grants: [{ principalId: developer.id, permissions: ["read", "write", "execute", "publish"] }],
-    });
+    if (!this.store.get("spaces", "operator-private"))
+      this.store.put("spaces", "operator-private", {
+        ...space,
+        id: "operator-private",
+        grants: [
+          { principalId: developer.id, permissions: ["read", "write", "execute", "publish"] },
+        ],
+      });
     const tools: ToolDefinition[] = [
       {
         name: "private.lookup",
@@ -145,6 +148,9 @@ export class WorkspaceTestHost extends DurableObject<{
   }
   changeToolVersion() {
     this.store.put("versions", "offers", "2");
+  }
+  revokePrivate() {
+    this.workspace.access.setGrants(developer, "operator-private", [], 1);
   }
 }
 export default {

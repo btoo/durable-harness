@@ -11,8 +11,13 @@ datasets to the public demo.
 
 Current cost references: [Workers](https://developers.cloudflare.com/workers/platform/pricing/),
 [R2](https://developers.cloudflare.com/r2/pricing/), and
-[the default coding model](https://developers.cloudflare.com/workers-ai/models/kimi-k2.7-code/).
+[the default coding model](https://developers.cloudflare.com/workers-ai/models/glm-5.3-flash/).
 Local deterministic tests do not invoke a model.
+
+The configured inference model is `@cf/zai-org/glm-5.3-flash`. Cloudflare lists $0.15
+per million input tokens, $0.50 per million output tokens, and $0.03 per million cached
+input tokens (verified September 8, 2026). Those rates are lower than the preceding Kimi
+configuration; relative task quality and total run cost still require measured comparison.
 
 ```sh
 npx wrangler login

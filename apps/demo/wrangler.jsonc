@@ -1,0 +1,25 @@
+{
+  "name": "durable-harness-demo",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "APPLICATIONS", "class_name": "DemoApplication" },
+      { "name": "MODEL_AGENTS", "class_name": "HarnessThink" },
+    ],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DemoApplication", "HarnessThink"] }],
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "durable-harness-artifacts" }],
+  "ai": { "binding": "AI" },
+  "vars": { "DEMO_MODE": "synthetic", "MODEL_ID": "@cf/meta/llama-3.3-70b-instruct-fp8-fast" },
+  "limits": { "cpu_ms": 30000 },
+  "observability": { "enabled": false },
+}

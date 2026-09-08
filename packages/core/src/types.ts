@@ -1,8 +1,15 @@
 import type { ValueGraph } from "./codec.js";
 
-export interface Principal { id: string; deploymentId: string; roles: ("customer" | "developer")[] }
+export interface Principal {
+  id: string;
+  deploymentId: string;
+  roles: ("customer" | "developer")[];
+}
 export type Permission = "read" | "write" | "publish" | "execute";
-export interface Grant { principalId: string; permissions: Permission[] }
+export interface Grant {
+  principalId: string;
+  permissions: Permission[];
+}
 export interface KnowledgeSpace {
   id: string;
   deploymentId: string;
@@ -11,7 +18,10 @@ export interface KnowledgeSpace {
   grants: Grant[];
   revision: number;
 }
-export interface SourceRef { spaceId: string; itemId: string }
+export interface SourceRef {
+  spaceId: string;
+  itemId: string;
+}
 export interface FunctionModule {
   name: string;
   version: string;
@@ -25,7 +35,14 @@ export interface WorkspaceSnapshot {
   modules?: Record<string, FunctionModule>;
   lineage: SourceRef[];
 }
-export type CellStatus = "running" | "interrupted" | "committed" | "failed" | "waiting_approval" | "waiting_connection" | "uncertain";
+export type CellStatus =
+  | "running"
+  | "interrupted"
+  | "committed"
+  | "failed"
+  | "waiting_approval"
+  | "waiting_connection"
+  | "uncertain";
 export interface CellRecord {
   id: string;
   workspaceId: string;
@@ -50,9 +67,16 @@ export interface ToolDefinition {
   publicActivity: string;
   requiresApproval?: boolean;
   execute: (input: unknown, context: ToolContext) => Promise<unknown>;
-  reconcile?: (operationId: string, input: unknown) => Promise<{ found: boolean; result?: unknown }>;
+  reconcile?: (
+    operationId: string,
+    input: unknown,
+  ) => Promise<{ found: boolean; result?: unknown }>;
 }
-export interface ToolContext { principal: Principal; operationId: string; workspaceId: string }
+export interface ToolContext {
+  principal: Principal;
+  operationId: string;
+  workspaceId: string;
+}
 export interface OperationRecord {
   id: string;
   cellId: string;
@@ -86,7 +110,18 @@ export interface RecordStore {
   search?<T>(collection: string, query: string, allowedIds: string[], limit: number): T[];
 }
 export interface CellExecutor {
-  execute(code: string, invoke: (name: string, input: unknown) => Promise<unknown>): Promise<unknown>;
+  execute(
+    code: string,
+    invoke: (name: string, input: unknown) => Promise<unknown>,
+  ): Promise<unknown>;
 }
-export interface Budget { maxOperations: number; maxSourceBytes: number; maxStateBytes: number }
-export const DEFAULT_CELL_BUDGET: Budget = { maxOperations: 64, maxSourceBytes: 64_000, maxStateBytes: 1_000_000 };
+export interface Budget {
+  maxOperations: number;
+  maxSourceBytes: number;
+  maxStateBytes: number;
+}
+export const DEFAULT_CELL_BUDGET: Budget = {
+  maxOperations: 64,
+  maxSourceBytes: 64_000,
+  maxStateBytes: 1_000_000,
+};

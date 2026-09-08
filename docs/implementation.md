@@ -6,12 +6,18 @@
 - Initial scaffold pushed and read back at `425c35dfacfcfb34c2e0d51194cdf8b8208fa300`.
 - Core code under development: graph codec, lexical cell compiler, versioned helper modules,
   SQLite record store, permissions, history, operation journal, and event log.
-- Seventeen unit tests pass over graph values, real SQLite, publication policy, scoped FTS,
-  compaction, evaluated learning, encrypted credentials, rotation/revocation, and artifacts.
-- Ten real Workers runtime tests pass: eviction recovery, approval/resume, helper version pins,
+- Eighteen unit tests pass over graph values, real SQLite, publication policy, scoped FTS,
+  compaction, evaluated learning, encrypted credentials, rotation/revocation, artifacts, and budgets.
+- Fourteen real Workers runtime tests pass: eviction recovery, approval/resume, helper version pins,
   input validation, unsupported captures, revoked grants, stream/history parity, uncertain
-  effects, replay divergence, and retained memory/R2 artifact handles.
-- Workers Paid activation is confirmed in the Cloudflare dashboard. Wrangler OAuth is authenticated.
+  effects, replay divergence, retained memory/R2 artifact handles, HTTP role enforcement,
+  customer correction impact, approval delivery, and WebSocket/history parity.
+- Workers Paid and R2 activation are confirmed in the Cloudflare dashboard. Wrangler is authenticated.
+- Private bucket `durable-harness-artifacts` created for the experiment.
+- React/Vite customer and developer reference UI runs against actual harness APIs.
+- Browser proof: a tested PO correction moved a Sunday follow-up to Monday on the next run;
+  approval/resume and saved activity survived reload; retained helper `nextFollowup` is inspectable.
+- Think integration and budgeted real-model endpoint are implemented but not yet exercised.
 
 ## Current verification
 

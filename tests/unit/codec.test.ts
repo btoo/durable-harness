@@ -5,8 +5,22 @@ describe("durable graph values", () => {
   it("preserves aliases, cycles, collection keys, sparse arrays, bytes, and scalars", () => {
     const offer = { price: 120, owner: undefined as unknown };
     offer.owner = offer;
-    const sparse = new Array(3); sparse[2] = offer;
-    const restored = decodeGraph(encodeGraph({ offer, alias: offer, sparse, map: new Map([[offer, 5n]]), set: new Set([offer]), bytes: new Uint8Array([0, 255]), date: new Date("2026-01-01"), undef: undefined, infinity: Infinity, negativeZero: -0 }));
+    const sparse = new Array(3);
+    sparse[2] = offer;
+    const restored = decodeGraph(
+      encodeGraph({
+        offer,
+        alias: offer,
+        sparse,
+        map: new Map([[offer, 5n]]),
+        set: new Set([offer]),
+        bytes: new Uint8Array([0, 255]),
+        date: new Date("2026-01-01"),
+        undef: undefined,
+        infinity: Infinity,
+        negativeZero: -0,
+      }),
+    );
     expect(restored.offer).toBe(restored.alias);
     expect((restored.offer as typeof offer).owner).toBe(restored.offer);
     expect((restored.sparse as unknown[])[2]).toBe(restored.offer);
@@ -20,7 +34,16 @@ describe("durable graph values", () => {
     expect(Object.is(restored.negativeZero, -0)).toBe(true);
   });
   it("rejects functions, accessors, promises, and arbitrary instances with a path", () => {
-    for (const value of [() => {}, Promise.resolve(1), new URL("https://example.com"), { get privateValue() { throw new Error("must not execute"); } }]) {
+    for (const value of [
+      () => {},
+      Promise.resolve(1),
+      new URL("https://example.com"),
+      {
+        get privateValue() {
+          throw new Error("must not execute");
+        },
+      },
+    ]) {
       expect(() => encodeGraph({ unsupported: value })).toThrow(/UNSUPPORTED_VALUE.*unsupported/);
     }
   });

@@ -11,6 +11,11 @@
     "node": ">=22"
   },
   "scripts": {
+    "dev": "vite --config apps/demo/vite.config.ts apps/demo",
+    "build": "vite build --config apps/demo/vite.config.ts apps/demo",
+    "setup": "node scripts/setup-local.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:runtime": "vitest run",
@@ -36,6 +41,7 @@
     "@types/node": "25.0.10",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
+    "prettier": "3.9.6",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
     "vite": "8.2.2",

@@ -3,8 +3,22 @@
   "main": "runtime/worker.ts",
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
-  "durable_objects": { "bindings": [{ "name": "WORKSPACES", "class_name": "WorkspaceTestHost" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WorkspaceTestHost"] }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "WORKSPACES", "class_name": "WorkspaceTestHost" },
+      { "name": "APPLICATIONS", "class_name": "DemoApplication" },
+      { "name": "MODEL_AGENTS", "class_name": "HarnessThink" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["WorkspaceTestHost", "DemoApplication", "HarnessThink"] },
+  ],
   "worker_loaders": [{ "binding": "LOADER" }],
-  "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "durable-harness-test-artifacts" }]
+  "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "durable-harness-test-artifacts" }],
+  "vars": {
+    "DEMO_MODE": "synthetic",
+    "SESSION_SECRET": "test-only-session-secret-at-least-32-characters",
+    "CREDENTIAL_KEY": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+    "MODEL_ID": "synthetic",
+  },
 }

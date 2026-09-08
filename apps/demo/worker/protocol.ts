@@ -1,0 +1,67 @@
+import { z } from "zod";
+import type { DemoApplication } from "./application.js";
+import type { HarnessThink } from "./think.js";
+
+export interface DemoEnv {
+  APPLICATIONS: DurableObjectNamespace;
+  MODEL_AGENTS: DurableObjectNamespace<HarnessThink>;
+  LOADER: WorkerLoader;
+  ARTIFACTS: R2Bucket;
+  ASSETS: Fetcher;
+  AI: Ai;
+  SESSION_SECRET: string;
+  CREDENTIAL_KEY: string;
+  ADMIN_TOKEN: string;
+  DEMO_MODE: string;
+  MODEL_ID: string;
+}
+// Workers' RPC mapper cannot infer values that intentionally contain unknown data graphs.
+// Keep the concrete public method contract while letting the transport serialize values.
+export type ApplicationStub = DurableObjectStub &
+  Pick<
+    DemoApplication,
+    | "state"
+    | "command"
+    | "apiState"
+    | "apiCommand"
+    | "subscribe"
+    | "modelContext"
+    | "modelPrepared"
+    | "modelReserve"
+    | "modelSettle"
+    | "modelCell"
+    | "modelEvent"
+  >;
+export function application(env: DemoEnv, sandbox: string): ApplicationStub {
+  return env.APPLICATIONS.getByName(sandbox) as ApplicationStub;
+}
+export const personaSchema = z.enum(["northstar", "cedar", "developer"]);
+export type Persona = z.infer<typeof personaSchema>;
+export const commandSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("run-synthetic") }),
+  z.object({ action: z.literal("prepare-message") }),
+  z.object({
+    action: z.literal("cell"),
+    source: z.string().min(1).max(64_000),
+    expectedRevision: z.number().int().nonnegative(),
+    id: z.string().uuid(),
+  }),
+  z.object({
+    action: z.literal("correct"),
+    preference: z.enum(["includeFreight", "businessDaysOnly"]),
+    text: z.string().min(1).max(2000),
+  }),
+  z.object({ action: z.literal("approve"), operationId: z.string().min(1) }),
+  z.object({ action: z.literal("reject"), operationId: z.string().min(1) }),
+  z.object({ action: z.literal("resume"), cellId: z.string().min(1) }),
+  z.object({ action: z.literal("compact") }),
+  z.object({ action: z.literal("model"), message: z.string().min(1).max(8000) }),
+]);
+export type DemoCommand = z.infer<typeof commandSchema>;
+export interface ModelRequest {
+  sandbox: string;
+  workspaceId: string;
+  principalId: string;
+  rootId: string;
+  message: string;
+}

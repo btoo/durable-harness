@@ -12,18 +12,42 @@ export function database() {
   const store = new SqlRecordStore({
     exec(query, ...bindings) {
       const statement = db.prepare(query);
-      return statement.columns().length ? statement.all(...bindings) : (statement.run(...bindings), []);
+      return statement.columns().length
+        ? statement.all(...bindings)
+        : (statement.run(...bindings), []);
     },
     transaction(fn) {
       const name = `t${depth++}`;
       db.exec(`SAVEPOINT ${name}`);
-      try { const result = fn(); db.exec(`RELEASE ${name}`); return result; }
-      catch (error) { db.exec(`ROLLBACK TO ${name}`); db.exec(`RELEASE ${name}`); throw error; }
-      finally { depth--; }
+      try {
+        const result = fn();
+        db.exec(`RELEASE ${name}`);
+        return result;
+      } catch (error) {
+        db.exec(`ROLLBACK TO ${name}`);
+        db.exec(`RELEASE ${name}`);
+        throw error;
+      } finally {
+        depth--;
+      }
     },
   });
-  for (const [id, buyer] of [["a", buyerA], ["b", buyerB], ["shared", buyerB]] as const) {
-    const space: KnowledgeSpace = { id, deploymentId: "demo", label: id, kind: id === "shared" ? "shared" : "tenant", revision: 1, grants: [{ principalId: dev.id, permissions: ["read", "write", "publish", "execute"] }, { principalId: buyer.id, permissions: ["read", "write", "execute"] }] };
+  for (const [id, buyer] of [
+    ["a", buyerA],
+    ["b", buyerB],
+    ["shared", buyerB],
+  ] as const) {
+    const space: KnowledgeSpace = {
+      id,
+      deploymentId: "demo",
+      label: id,
+      kind: id === "shared" ? "shared" : "tenant",
+      revision: 1,
+      grants: [
+        { principalId: dev.id, permissions: ["read", "write", "publish", "execute"] },
+        { principalId: buyer.id, permissions: ["read", "write", "execute"] },
+      ],
+    };
     store.put("spaces", id, space);
   }
   return { store, close: () => db.close() };

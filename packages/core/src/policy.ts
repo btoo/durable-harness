@@ -7,11 +7,21 @@ export class AccessPolicy {
 
   permits(principal: Principal, spaceId: string, permission: Permission): boolean {
     const space = this.store.get<KnowledgeSpace>("spaces", spaceId);
-    return !!space && space.deploymentId === principal.deploymentId && space.grants.some(grant => grant.principalId === principal.id && grant.permissions.includes(permission));
+    return (
+      !!space &&
+      space.deploymentId === principal.deploymentId &&
+      space.grants.some(
+        (grant) => grant.principalId === principal.id && grant.permissions.includes(permission),
+      )
+    );
   }
 
   require(principal: Principal, spaceId: string, permission: Permission): void {
-    if (!this.permits(principal, spaceId, permission)) throw new HarnessFault("ACCESS_DENIED", `This identity cannot ${permission} the requested workspace.`);
+    if (!this.permits(principal, spaceId, permission))
+      throw new HarnessFault(
+        "ACCESS_DENIED",
+        `This identity cannot ${permission} the requested workspace.`,
+      );
   }
 
   requireSources(principal: Principal, sources: readonly SourceRef[]): void {
@@ -19,15 +29,31 @@ export class AccessPolicy {
   }
 
   visible(principal: Principal, spaceId: string, lineage: readonly SourceRef[]): boolean {
-    return this.permits(principal, spaceId, "read") && lineage.every(source => this.permits(principal, source.spaceId, "read"));
+    return (
+      this.permits(principal, spaceId, "read") &&
+      lineage.every((source) => this.permits(principal, source.spaceId, "read"))
+    );
   }
 
-  setGrants(principal: Principal, spaceId: string, grants: KnowledgeSpace["grants"], expectedRevision: number): KnowledgeSpace {
-    invariant(principal.roles.includes("developer"), "ACCESS_DENIED", "A developer must change access grants.");
+  setGrants(
+    principal: Principal,
+    spaceId: string,
+    grants: KnowledgeSpace["grants"],
+    expectedRevision: number,
+  ): KnowledgeSpace {
+    invariant(
+      principal.roles.includes("developer"),
+      "ACCESS_DENIED",
+      "A developer must change access grants.",
+    );
     this.require(principal, spaceId, "publish");
     return this.store.transaction(() => {
       const space = this.store.get<KnowledgeSpace>("spaces", spaceId)!;
-      invariant(space.revision === expectedRevision, "STALE_REVISION", "Access changed while you were editing it. Reload the workspace.");
+      invariant(
+        space.revision === expectedRevision,
+        "STALE_REVISION",
+        "Access changed while you were editing it. Reload the workspace.",
+      );
       const updated = { ...space, grants, revision: space.revision + 1 };
       this.store.put("spaces", spaceId, updated);
       return updated;

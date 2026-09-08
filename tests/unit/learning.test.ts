@@ -81,10 +81,29 @@ function setup(kind: LearningTarget["kind"] = "instruction") {
     lineage: [],
     origin: "customer_correction",
   });
-  return { learning, proposal, store };
+  return { learning, proposal, store, target };
 }
 
 describe("measured configuration promotion", () => {
+  it("resumes an interrupted evaluation without repeating settled case scores", async () => {
+    const { learning, proposal, store, target } = setup();
+    const evaluate = target.evaluator.evaluate;
+    let calls = 0;
+    target.evaluator.evaluate = async (input) => {
+      if (++calls === 2) throw new Error("Evaluator temporarily unavailable");
+      return evaluate(input);
+    };
+    await expect(learning.evaluate(buyerA, proposal.id)).rejects.toThrow("temporarily");
+    // This is the persisted status an evicted evaluator can leave behind.
+    store.put("proposals", proposal.id, {
+      ...learning.read(buyerA, proposal.id),
+      status: "evaluating",
+    });
+    const restored = new Learning(store, [target]);
+    const report = await restored.evaluate(buyerA, proposal.id);
+    expect(report.eligible).toBe(true);
+    expect(calls).toBe(5); // Four distinct scores, plus the interrupted attempt.
+  });
   it("preserves source restrictions when a derived candidate becomes active configuration", async () => {
     const { learning, proposal } = setup();
     const derived = learning.propose(dev, {
@@ -112,6 +131,16 @@ describe("measured configuration promotion", () => {
     await learning.evaluate(buyerA, proposal.id);
     await expect(learning.promote(buyerA, proposal.id, true)).rejects.toThrow(/reviewer/);
     expect((await learning.promote(dev, proposal.id, true)).value).toBe("unit");
+  });
+  it("invalidates evaluated authority when the evaluator version changes", async () => {
+    const { learning, proposal, target } = setup();
+    const previous = await learning.evaluate(buyerA, proposal.id);
+    target.evaluator.id = "price-per-unit-v2";
+    await expect(learning.promote(buyerA, proposal.id)).rejects.toThrow("exact candidate");
+    const next = await learning.evaluate(buyerA, proposal.id);
+    expect(next.id).not.toBe(previous.id);
+    expect(next.evaluatorId).toBe("price-per-unit-v2");
+    expect((await learning.promote(buyerA, proposal.id)).revision).toBe(2);
   });
   it("refuses stale candidates after another proposal changes the target", async () => {
     const { learning, proposal } = setup();

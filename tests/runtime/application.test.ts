@@ -235,7 +235,7 @@ describe("authenticated reference application", () => {
         (item) => item.text === "I retained the evidence notes and a helper for the next run.",
       ),
     ).toBe(true);
-    expect(snapshot.runs?.[0]?.steps).toBe(3);
+    expect(snapshot.runs?.[0]?.steps).toBe(4);
     expect(snapshot.runs).toHaveLength(1);
     const streamed = snapshot.events
       .filter((event) => event.kind === "model.delta")

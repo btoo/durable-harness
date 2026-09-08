@@ -1,5 +1,6 @@
 export * from "./errors.js";
 export * from "./codec.js";
+export * from "./inspection.js";
 export * from "./types.js";
 export * from "./compiler.js";
 export * from "./policy.js";

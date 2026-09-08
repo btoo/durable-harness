@@ -71,6 +71,7 @@ export interface EvaluationReport {
   proposalId: string;
   evaluatorId: string;
   candidateHash: string;
+  validationHash: string;
   caseIds: string[];
   baseline: CaseScore[];
   candidate: CaseScore[];
@@ -94,6 +95,7 @@ export interface LearningTarget {
 export class Learning {
   private readonly access: AccessPolicy;
   private readonly targets: Map<string, LearningTarget>;
+  private readonly evaluating = new Set<string>();
   constructor(
     private readonly store: RecordStore,
     targets: LearningTarget[],
@@ -277,40 +279,66 @@ export class Learning {
       );
   }
   async evaluate(principal: Principal, id: string): Promise<EvaluationReport> {
-    const proposal = this.read(principal, id);
-    this.access.require(principal, proposal.workspaceId, "write");
-    const target = this.target(proposal.target);
-    const baseline = this.configuration(principal, proposal.workspaceId, proposal.target)!;
     invariant(
-      baseline.revision === proposal.baseRevision,
-      "STALE_REVISION",
-      "Rebase this proposal onto the current configuration before evaluating.",
+      !this.evaluating.has(id),
+      "WORKSPACE_BUSY",
+      "This proposal is currently evaluating. Inspect its progress before resuming.",
     );
-    const cases = target.cases.filter((testCase) => testCase.split === "validation");
-    invariant(
-      cases.length > 0,
-      "EVALUATION_REQUIRED",
-      "This target has no developer-owned validation cases.",
-    );
-    invariant(
-      proposal.status !== "evaluating" && proposal.status !== "promoted",
-      "INVALID_INPUT",
-      "This proposal is already evaluating or promoted.",
-    );
-    this.store.put("proposals", id, { ...proposal, status: "evaluating" });
-    const baselineScores: CaseScore[] = [];
-    const candidateScores: CaseScore[] = [];
+    this.evaluating.add(id);
     try {
-      for (const testCase of cases) {
-        const baselineScore = await target.evaluator.evaluate({
-          configuration: baseline.value,
-          testCase,
-        });
-        const candidateScore = await target.evaluator.evaluate({
-          configuration: proposal.candidate,
-          testCase,
-        });
-        for (const score of [baselineScore, candidateScore])
+      const proposal = this.read(principal, id);
+      this.access.require(principal, proposal.workspaceId, "write");
+      invariant(
+        !["promoted", "rejected", "rolled_back"].includes(proposal.status),
+        "INVALID_INPUT",
+        "This proposal is already settled.",
+      );
+      const target = this.target(proposal.target);
+      const baseline = this.configuration(principal, proposal.workspaceId, proposal.target)!;
+      invariant(
+        baseline.revision === proposal.baseRevision,
+        "STALE_REVISION",
+        "Rebase this proposal onto the current configuration before evaluating.",
+      );
+      target.validate(proposal.candidate, baseline.value);
+      const cases = target.cases.filter((testCase) => testCase.split === "validation");
+      invariant(
+        cases.length > 0,
+        "EVALUATION_REQUIRED",
+        "This target has no developer-owned validation cases.",
+      );
+      const candidateHash = await contentHash(JSON.stringify(proposal.candidate));
+      const validationHash = await contentHash(JSON.stringify([target.evaluator.id, cases]));
+      const signature = await contentHash(
+        JSON.stringify([candidateHash, validationHash, baseline.revision, baseline.value]),
+      );
+      type Progress = {
+        id: string;
+        signature: string;
+        baseline: CaseScore[];
+        candidate: CaseScore[];
+        createdAt: string;
+      };
+      let progress = this.store.get<Progress>("evaluation_progress", id);
+      if (!progress || progress.signature !== signature)
+        progress = {
+          id: crypto.randomUUID(),
+          signature,
+          baseline: [],
+          candidate: [],
+          createdAt: new Date().toISOString(),
+        };
+      this.store.put("evaluation_progress", id, progress);
+      this.store.put("proposals", id, { ...proposal, status: "evaluating" });
+      for (const testCase of cases)
+        for (const side of ["baseline", "candidate"] as const) {
+          if (progress[side].some((score) => score.caseId === testCase.id)) continue;
+          this.access.require(principal, proposal.workspaceId, "write");
+          this.access.requireSources(principal, proposal.lineage);
+          const score = await target.evaluator.evaluate({
+            configuration: side === "baseline" ? baseline.value : proposal.candidate,
+            testCase,
+          });
           invariant(
             score.caseId === testCase.id &&
               Number.isFinite(score.score) &&
@@ -319,46 +347,63 @@ export class Learning {
             "INVALID_INPUT",
             "The evaluator returned an invalid case identity or score.",
           );
-        baselineScores.push(baselineScore);
-        candidateScores.push(candidateScore);
-      }
+          this.access.require(principal, proposal.workspaceId, "write");
+          this.access.requireSources(principal, proposal.lineage);
+          progress[side].push(score);
+          this.store.put("evaluation_progress", id, progress);
+        }
       const eligible =
         cases.every(
           (testCase, i) =>
-            (!testCase.critical || candidateScores[i]!.passed) &&
-            !(baselineScores[i]!.passed && !candidateScores[i]!.passed),
+            (!testCase.critical || progress.candidate[i]!.passed) &&
+            !(progress.baseline[i]!.passed && !progress.candidate[i]!.passed),
         ) &&
-        candidateScores.reduce((sum, score) => sum + score.score, 0) >
-          baselineScores.reduce((sum, score) => sum + score.score, 0);
+        progress.candidate.reduce((sum, score) => sum + score.score, 0) >
+          progress.baseline.reduce((sum, score) => sum + score.score, 0);
       const report: EvaluationReport = {
-        id: crypto.randomUUID(),
+        id: progress.id,
         proposalId: id,
         evaluatorId: target.evaluator.id,
-        candidateHash: await contentHash(JSON.stringify(proposal.candidate)),
+        candidateHash,
+        validationHash,
         caseIds: cases.map((testCase) => testCase.id),
-        baseline: baselineScores,
-        candidate: candidateScores,
+        baseline: progress.baseline,
+        candidate: progress.candidate,
         eligible,
-        createdAt: new Date().toISOString(),
+        createdAt: progress.createdAt,
       };
-      this.access.require(principal, proposal.workspaceId, "write");
-      this.access.requireSources(principal, proposal.lineage);
-      this.store.put("evaluations", report.id, report);
-      this.store.put("proposals", id, {
-        ...proposal,
-        evaluationId: report.id,
-        status: eligible
-          ? ["memory", "instruction"].includes(proposal.kind)
-            ? "eligible"
-            : "awaiting_review"
-          : "proposed",
+      return this.store.transaction(() => {
+        this.access.require(principal, proposal.workspaceId, "write");
+        this.access.requireSources(principal, proposal.lineage);
+        invariant(
+          this.configuration(principal, proposal.workspaceId, proposal.target)?.revision ===
+            proposal.baseRevision,
+          "STALE_REVISION",
+          "The configuration changed during evaluation. Rebase the proposal before continuing.",
+        );
+        const current = this.read(principal, id);
+        invariant(
+          current.status === "evaluating",
+          "STALE_REVISION",
+          "This proposal changed while its evaluation was running.",
+        );
+        this.store.put("evaluations", report.id, report);
+        this.store.put("proposals", id, {
+          ...proposal,
+          evaluationId: report.id,
+          status: eligible
+            ? ["memory", "instruction"].includes(proposal.kind)
+              ? "eligible"
+              : "awaiting_review"
+            : "proposed",
+        });
+        return report;
       });
-      return report;
-    } catch (error) {
-      this.store.put("proposals", id, { ...proposal, status: "proposed" });
-      throw error;
+    } finally {
+      this.evaluating.delete(id);
     }
   }
+
   async promote(principal: Principal, id: string, reviewed = false): Promise<ConfigurationVersion> {
     const proposal = this.read(principal, id);
     this.access.require(principal, proposal.workspaceId, "write");
@@ -377,7 +422,16 @@ export class Learning {
     invariant(
       report &&
         report.eligible &&
-        report.candidateHash === (await contentHash(JSON.stringify(proposal.candidate))),
+        report.candidateHash === (await contentHash(JSON.stringify(proposal.candidate))) &&
+        report.validationHash ===
+          (await contentHash(
+            JSON.stringify([
+              this.target(proposal.target).evaluator.id,
+              this.target(proposal.target).cases.filter(
+                (testCase) => testCase.split === "validation",
+              ),
+            ]),
+          )),
       "EVALUATION_REQUIRED",
       "The exact candidate must improve validation results without regressions before promotion.",
     );

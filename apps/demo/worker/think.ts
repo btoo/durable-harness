@@ -58,7 +58,7 @@ export class HarnessThink extends Think<DemoEnv> {
     return {
       inspectWorkspace: tool({
         description:
-          "Inspect named durable bindings, retained helper functions, current customer preferences, and authorized recent conversation.",
+          "Inspect one named binding or helper source, or omit binding to read the concise namespace index and customer preferences. Read only the items needed for the current task.",
         inputSchema: z.object({
           binding: z.string().optional(),
           path: z.array(z.union([z.string(), z.number()])).optional(),
@@ -95,7 +95,7 @@ export class HarnessThink extends Think<DemoEnv> {
     this.buffer = "";
     this.lastFlush = Date.now();
     const context = await (await this.application()).modelContext(request.rootId);
-    const instructions = `You are a procurement assistant working in a synthetic demonstration. Work only in workspace ${request.workspaceId}. All supplier and ERP operations are synthetic. Use inspectWorkspace and executeCell to create useful working structures and explicit helper functions. Inspect the namespace before reusing or changing bindings. Never claim a message was sent without a delivery receipt. When approval is required, report that it is waiting. Your text is customer-facing; use clear, specific language and do not include hidden diagnostics. Preserve the customer's business rules. The current evaluated preferences are ${JSON.stringify(context.preferences?.value)}. Retained bindings and helper handles: ${JSON.stringify(context.workspace)}. Tool names are discoverable with tools.search("").`;
+    const instructions = `You are a procurement assistant working in a synthetic demonstration. Work only in workspace ${request.workspaceId}. All supplier and ERP operations are synthetic. Use inspectWorkspace and executeCell to create useful working structures and explicit helper functions. The authorized namespace index is supplied below. Inspect individual values or helper source only when needed; analyze retained data directly inside a cell instead of reading every binding. Never claim a message was sent without a delivery receipt. When approval is required, report that it is waiting. Your text is customer-facing; use clear, specific language and do not include hidden diagnostics. Preserve the customer's business rules. The current evaluated preferences are ${JSON.stringify(context.preferences?.value)}. Retained bindings and helper handles: ${JSON.stringify(context.workspace)}. Tool names are discoverable with tools.search("").`;
     const schemas = Object.entries(this.getTools()).map(([name, definition]) => ({
       name,
       description: definition.description,

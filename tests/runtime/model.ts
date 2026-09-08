@@ -29,7 +29,16 @@ export class TestHarnessThink extends HarnessThink {
               'const modelNotes = { checked: ["supplier evidence"], pending: [] }; function countChecked(notes: {checked:string[]}) { return notes.checked.length; }',
           }),
         });
-      else
+      else if (step === 2)
+        chunks.push({
+          type: "tool-call",
+          toolCallId: "inspect-helper",
+          toolName: "inspectWorkspace",
+          input: JSON.stringify({ binding: "countChecked" }),
+        });
+      else {
+        if (!JSON.stringify(options.prompt).includes("function countChecked"))
+          throw new Error("The model did not receive the retained helper source.");
         chunks.push(
           { type: "text-start", id: "response" },
           {
@@ -39,9 +48,10 @@ export class TestHarnessThink extends HarnessThink {
           },
           { type: "text-end", id: "response" },
         );
+      }
       chunks.push({
         type: "finish",
-        finishReason: { unified: step < 2 ? "tool-calls" : "stop", raw: undefined },
+        finishReason: { unified: step < 3 ? "tool-calls" : "stop", raw: undefined },
         usage: {
           inputTokens: { total: 30, noCache: 30, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 20, text: 20, reasoning: undefined },

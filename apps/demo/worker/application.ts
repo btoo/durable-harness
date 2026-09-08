@@ -14,6 +14,7 @@ import {
   RunBudgets,
   asFault,
   decodeGraph,
+  inspectGraph,
   invariant,
   type CellRecord,
   type ContextReceipt,
@@ -742,14 +743,17 @@ export class DemoApplication extends DurableObject<DemoEnv> {
   }
   modelBinding(rootId: string, binding: string, path: (string | number)[] = []) {
     const request = this.modelRequest(rootId);
+    const principal = principalFor(request.principalId as Persona);
+    if (this.workspace.snapshot(principal, request.workspaceId).functions[binding])
+      return {
+        binding,
+        kind: "helper" as const,
+        helper: this.workspace.readHelper(principal, request.workspaceId, binding),
+      };
     return {
       binding,
-      value: this.workspace.readBinding(
-        principalFor(request.principalId as Persona),
-        request.workspaceId,
-        binding,
-        path,
-      ),
+      kind: "data" as const,
+      ...inspectGraph(this.workspace.readBinding(principal, request.workspaceId, binding, path)),
     };
   }
   async modelPrepared(

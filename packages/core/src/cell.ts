@@ -124,6 +124,17 @@ export class DurableWorkspace {
     return graph;
   }
 
+  readHelper(principal: Principal, workspaceId: string, name: string) {
+    const helper = this.snapshot(principal, workspaceId).functions[name];
+    invariant(helper, "NOT_FOUND", "No retained helper exists with that name.");
+    invariant(
+      helper.source.length <= 16_000,
+      "BUDGET_EXCEEDED",
+      "This helper exceeds the inspection limit. Keep reusable helper modules small.",
+    );
+    return helper;
+  }
+
   operations(principal: Principal, workspaceId: string, cellId: string): OperationRecord[] {
     this.access.require(principal, workspaceId, "read");
     const cell = this.store.get<CellRecord>("cells", cellId);

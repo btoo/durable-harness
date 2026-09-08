@@ -70,6 +70,17 @@
   cross-tenant denial, approved dispatch, and revocation. Live HTTPS proof is still pending.
 - Replay now rejects omitted journal entries before committing. Untrusted error strings
   cannot manufacture authorization or resumable recovery states.
+- The real HTTPS MCP proof passed on application version `66983435-dc8d-4629-b0ce-122c555ac89b`:
+  authorization, approved use, actual actor restart, unattended refresh, provider revocation,
+  and explicit reconnection followed by resuming the original cell. Its separate fixture
+  contains only fictional prices and no customer connections.
+- GLM's next generation attempt produced a valid inspection step after about 74 seconds,
+  then reached the 120-second active-time limit during step two. The watchdog produced a
+  truthful failed outcome; no new bindings/helpers were created. Reported settled usage was
+  4,344 tokens, with 32,196 tokens retained as an unsettled reservation.
+- Inspection now returns readable JSON for ordinary trees and graph notation for special
+  values/references. Retained helper source is inspectable. Evaluation progress now survives
+  interruption and is invalidated if the candidate, baseline, cases, or evaluator version changes.
 
 ## Current verification
 

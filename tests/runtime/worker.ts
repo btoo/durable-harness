@@ -1,3 +1,4 @@
+import { quickstart } from "../../examples/quickstart.js";
 import { DurableObject } from "cloudflare:workers";
 import {
   Artifacts,
@@ -279,6 +280,15 @@ export class WorkspaceTestHost extends DurableObject<{
     } catch (error) {
       return { ok: false, error: asFault(error).toJSON() };
     }
+  }
+  async documentationExample() {
+    return modelData(
+      await quickstart(
+        this.store,
+        new CloudflareCellExecutor(this.env.LOADER),
+        new R2Artifacts(this.env.ARTIFACTS),
+      ),
+    );
   }
   authorizeConnection() {
     this.store.put("connection", "ready", true);

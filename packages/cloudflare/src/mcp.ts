@@ -90,7 +90,7 @@ export class CloudflareMcpTransport implements McpTransport {
       return {
         tools: this.catalog(connection.id),
         backgroundAccess:
-          connection.auth === "none" ||
+          (connection.auth === "none" && !tokens) ||
           tokens?.refresh_token ||
           (connection.auth === "bearer" && credentials?.expiresAt === undefined)
             ? ("supported" as const)

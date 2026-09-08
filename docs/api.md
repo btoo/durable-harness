@@ -21,7 +21,9 @@ const result = await workspace.execute(principal, workspaceId, source, {
 
 `ctx` is the current Durable Object state. Provision the authorized `KnowledgeSpace`
 through your trusted host first. The reference integration lives in
-[`application.ts`](../apps/demo/worker/application.ts).
+[`application.ts`](../apps/demo/worker/application.ts). The complete
+[quickstart recipe](../examples/quickstart.ts) compiles and runs in the Worker test suite;
+the snippets below illustrate individual calls in that host context.
 
 Use a stable request ID on retry. Reusing an ID with different source or principal fails.
 Successful retries return the original committed revision. Start a new cell after the

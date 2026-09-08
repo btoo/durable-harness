@@ -141,6 +141,9 @@ describe("remote connection authorization", () => {
       "https://127.0.0.1",
       "https://10.0.0.1",
       "https://[::1]",
+      "https://[fd00::1]",
+      "https://[::ffff:127.0.0.1]",
+      "https://mcp.example.test?access_token=secret",
       "https://user:password@example.test",
     ])
       expect(() => validateMcpUrl(url)).toThrow();

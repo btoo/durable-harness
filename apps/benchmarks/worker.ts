@@ -1,3 +1,5 @@
+import { compareContext } from "./context.js";
+import { z } from "zod";
 import { DurableObject } from "cloudflare:workers";
 import { Workspace } from "@cloudflare/shell";
 import { stateTools } from "@cloudflare/shell/workers";
@@ -73,7 +75,14 @@ export class BenchmarkRun extends DurableObject<Env> {
   private readonly learning = new Learning(this.records, [benchmarkTarget()]);
   private readonly budgets = new RunBudgets(this.records);
   private readonly generator = workersAICandidateGenerator(this.env.AI, this.env.MODEL_ID, {
-    version: "comparison-v1",
+    version: "comparison-v2",
+    candidateSchema: z
+      .object({
+        includeFreight: z.boolean(),
+        businessDaysOnly: z.boolean(),
+        approvalRequired: z.literal(true),
+      })
+      .strict(),
     instructions:
       "Apply only the two customer corrections. Preserve approvalRequired true and all unrelated configuration.",
   });
@@ -116,7 +125,19 @@ export class BenchmarkRun extends DurableObject<Env> {
         action: string;
         candidate?: Preferences;
         caseIds?: string[];
+        strategy?: "extractive" | "generic-summary" | "recent-window";
       };
+      if (input.action === "context")
+        return Response.json(
+          await compareContext(
+            this.records,
+            this.env.AI,
+            this.env.MODEL_ID,
+            owner,
+            scope,
+            input.strategy ?? "extractive",
+          ),
+        );
       if (input.action === "metadata")
         return Response.json({
           model: this.env.MODEL_ID,

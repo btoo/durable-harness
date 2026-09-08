@@ -7,11 +7,18 @@ An agent can create working structures, retain helper functions, pause for appro
 and recover its recorded operations after interruption. Customer corrections become
 versioned proposals with evaluation evidence before promotion.
 
-**Experimental, under active implementation.** The current slice runs synthetic PO
-and quoting workflows with customer and developer views. Recovery tests exercise real
-local Durable Objects, SQLite, R2, and network-isolated Dynamic Workers. Comparative
-benchmarks, the full remote MCP integration, private observation, and the recorded
-walkthrough remain in progress. No production-readiness or superiority claim is made.
+**Experimental, under active implementation.** The reference app runs synthetic PO
+and quoting workflows with customer and developer views, durable supplier agents,
+reviewed capabilities, scoped knowledge, and remote MCP connections.
+
+[Open the demo](https://durable-harness-demo.btjk138.workers.dev) ·
+[Read the API guide](docs/api.md) · [See the experimental results](docs/experiments.md)
+
+Real-model checks proved generation, recovery after compaction and restart, a tested
+customer-preference improvement, and cross-customer reuse of reviewed code. The first
+small learning comparison found **no quality advantage over Codemode + GEPA**. See the
+[acceptance register](docs/acceptance.md) for remaining work; no production-readiness or
+superiority claim is made. The Recordly walkthrough is still being prepared.
 
 ## Try it locally
 
@@ -37,7 +44,7 @@ customer-facing messages. No live suppliers or customer systems are connected.
 
 `npm run setup` creates local secrets in a Git-ignored file. Remote bindings are opt-in
 at development startup. Real-model experiments require an administrator token, a
-Cloudflare AI binding, and a finite root budget. UI exercises are explicitly deterministic.
+Cloudflare AI binding, and a finite root budget. Default UI exercises are deterministic. The developer correction form can also run a funded model-generated proposal.
 
 ## The programming model
 
@@ -45,11 +52,14 @@ A **cell** is a block of TypeScript executed as one unit against a workspace.
 After successful execution, its supported named values and helper functions are
 committed durably for later cells to use, including after a restart.
 
-An agent writes a TypeScript cell using discoverable capabilities:
+An agent writes a TypeScript cell and can discover host capabilities through `tools.search`:
 
 ```ts
-const responses = await tools.call("supplier.readOffers", {});
-const comparison = { responses, pending: [], decisions: [] };
+const offers = [
+  { supplier: "Aster", price: 120 },
+  { supplier: "Brookfield", price: 95 },
+];
+const comparison = { offers, pending: [], decisions: [] };
 const sameComparison = comparison;
 
 function cheapest(items: { price: number }[]) {
@@ -82,6 +92,9 @@ undo an external action.
 | `Learning.feedback`, `propose`, `evaluate`, `promote`         | Apply measured, policy-controlled changes                         |
 | `RunBudgets`                                                  | Account for steps, tokens, active time, and descendant admissions |
 | `Connections`                                                 | Track ownership, grants, refresh, and reconnection                |
+| `LearningPipeline`                                            | Resume bounded generation, evaluation, promotion and review       |
+| `AgentRegistry`                                               | Persist scoped delegation, mailboxes and immutable results        |
+| `Capabilities`                                                | Evaluate, approve and separately publish reusable code            |
 
 See the [API guide](docs/api.md) · [MCP connections](docs/mcp.md), [deployment guide](docs/deployment.md), and
 [implementation ledger](docs/implementation.md). Packages currently export workspace
@@ -101,12 +114,13 @@ npm run format:check
 Tests cover retained values/functions, object eviction, approval/resume, uncertain
 effects, replay divergence, private artifacts, revocation, history retrieval,
 compaction, evaluated promotion, OAuth lifecycle contracts, HTTP role enforcement,
-and live/history parity. OAuth tests currently use a controlled transport adapter;
-they do not yet prove an external provider.
+and live/history parity. Deployed checks also exercise a real HTTPS OAuth fixture,
+including refresh after restart, revocation, reconnection, and original-cell resumption.
 
 Compaction retains original history and creates a retrievable checkpoint. Exact
 original recovery is testable; effective model recall still needs comparative
-measurement. Current learning evaluations use deterministic business checks.
+measurement. Current learning evaluations use deterministic business checks. The complete
+[quickstart recipe](examples/quickstart.ts) is compiled and exercised by the Worker test suite.
 
 ## Contributing
 

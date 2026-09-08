@@ -78,6 +78,15 @@ export function validateMcpUrl(url: string, allowLocalHttp = false): URL {
     "INVALID_INPUT",
     "Credentials and fragments are not allowed in MCP URLs.",
   );
+  invariant(
+    ![...parsed.searchParams.keys()].some((key) =>
+      /^(?:auth|authorization|token|access_token|refresh_token|api[-_]?key|key|secret|client_secret|password|code)$/i.test(
+        key,
+      ),
+    ),
+    "INVALID_INPUT",
+    "Put credentials in the protected authorization flow or token field, not the MCP URL.",
+  );
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   const local =
     host === "localhost" ||
@@ -86,7 +95,7 @@ export function validateMcpUrl(url: string, allowLocalHttp = false): URL {
     host === "::1" ||
     host === "0.0.0.0" ||
     /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) ||
-    /^(fc|fd|fe80):/.test(host);
+    (host.includes(":") && (!/^[23][0-9a-f]{3}:/.test(host) || host.startsWith("2001:db8:")));
   invariant(
     (parsed.protocol === "https:" && !local) ||
       (allowLocalHttp && local && parsed.protocol === "http:"),

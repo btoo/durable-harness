@@ -18,6 +18,7 @@
     "apps/**/*.ts",
     "apps/**/*.tsx",
     "tests/**/*.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "examples/**/*.ts"
   ]
 }

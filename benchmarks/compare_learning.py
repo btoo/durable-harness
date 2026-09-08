@@ -4,6 +4,7 @@ import pathlib
 import sys
 import time
 import urllib.request
+import urllib.error
 import uuid
 import gepa
 from gepa.core.adapter import EvaluationBatch
@@ -25,9 +26,12 @@ class Client:
         self.requests += 1
         if self.requests > 40 or time.monotonic() - self.started > 120:
             raise RuntimeError("The comparison exceeded its request or wall-time budget")
-        request = urllib.request.Request(self.url, json.dumps({"action": action, **values}).encode(), headers={"Content-Type": "application/json", "Authorization": f"Bearer {secrets['ADMIN_TOKEN']}"})
-        with urllib.request.urlopen(request, timeout=max(1, 120-(time.monotonic()-self.started))) as response:
-            result = json.load(response)
+        request = urllib.request.Request(self.url, json.dumps({"action": action, **values}).encode(), headers={"Content-Type": "application/json", "User-Agent": "durable-harness-benchmark/0.1", "Authorization": f"Bearer {secrets['ADMIN_TOKEN']}"})
+        try:
+            with urllib.request.urlopen(request, timeout=max(1, 120-(time.monotonic()-self.started))) as response:
+                result = json.load(response)
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(f"{action}: HTTP {error.code}: {error.read().decode()}") from None
         self.filesystem_ms += result.get("filesystemMs", 0)
         if "usage" in result:
             self.model_usage = result["usage"]

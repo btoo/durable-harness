@@ -43,3 +43,8 @@ The HTTP path is locally verified with controlled responses. Initial live resear
 also use separately labeled, read-only CDC observations through an existing operator
 credential. CDC lag and absent historical state must remain explicit. No private evidence
 is imported into the public demo or committed to this repository.
+
+Private CDC samples have now been retained for both PO and quoting activity, selected
+from the most active applicable customer teams. They remain outside this repository.
+These are bounded observations, not complete historical replays; source prompts, delayed
+feedback, and historical business-state coverage must be assessed per record.

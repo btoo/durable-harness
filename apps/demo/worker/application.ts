@@ -411,7 +411,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
               description: "Capture a test string",
               parameters: {
                 type: "object",
-                properties: { text: { type: "string" } },
+                properties: { text: { type: "string", description: "The literal probe text." } },
                 required: ["text"],
               },
             },

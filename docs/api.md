@@ -121,6 +121,12 @@ the same candidate, baseline, evaluation cases, and evaluator version. Eligible 
 and memory changes promote automatically. Other change kinds pause for review. The PO and
 quoting correction exercises both use this pipeline with a labeled deterministic generator.
 
+The Cloudflare adapter also exposes `modelCandidateGenerator` and `workersAICandidateGenerator`.
+They use one bounded model step per candidate, preserve default reasoning, and return reported
+usage to the root ledger. Missing usage remains reserved. The reference correction form can
+select this path in developer view with an operator token. Admission is durable, and runtime
+alarms drive the queued improvement after the browser request returns.
+
 Customer variations are configuration versions. Generated code-package publication,
 state-schema migrations, and infrastructure deployment are not yet implemented.
 

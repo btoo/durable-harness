@@ -6,7 +6,7 @@
   "durable_objects": {
     "bindings": [
       { "name": "WORKSPACES", "class_name": "WorkspaceTestHost" },
-      { "name": "APPLICATIONS", "class_name": "DemoApplication" },
+      { "name": "APPLICATIONS", "class_name": "TestDemoApplication" },
       { "name": "MODEL_AGENTS", "class_name": "TestHarnessThink" },
       { "name": "MCP_TESTS", "class_name": "McpTestHost" },
       { "name": "CATALOG", "class_name": "SyntheticCatalog" },
@@ -17,7 +17,7 @@
       "tag": "v1",
       "new_sqlite_classes": [
         "WorkspaceTestHost",
-        "DemoApplication",
+        "TestDemoApplication",
         "TestHarnessThink",
         "McpTestHost",
         "SyntheticCatalog",

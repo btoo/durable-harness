@@ -1210,3 +1210,18 @@ input:focus-visible {
 .tabs {
   overflow-x: auto;
 }
+
+.model-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+.correction input[type="password"] {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 8px 0;
+}

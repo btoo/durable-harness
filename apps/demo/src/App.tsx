@@ -112,7 +112,8 @@ export function App() {
             "model.failed",
             "model.interrupted",
             "action.awaiting_approval",
-          ].includes(record.kind)
+          ].includes(record.kind) ||
+          record.kind.startsWith("learning.")
         )
           void load(workspaceId).catch((error) => setError(String(error)));
       };
@@ -464,8 +465,9 @@ export function App() {
                     <Correction
                       kind={selected.kind}
                       busy={busy}
+                      developer={developer}
                       onCancel={() => setShowCorrection(false)}
-                      onSubmit={(value) => void perform(value)}
+                      onSubmit={(value, token) => void perform(value, token)}
                     />
                   ) : null}
                 </>
@@ -638,12 +640,16 @@ function Correction({
   busy,
   onCancel,
   onSubmit,
+  developer,
 }: {
   kind: "po" | "quoting";
   busy: boolean;
+  developer: boolean;
   onCancel: () => void;
-  onSubmit: (command: DemoCommand) => void;
+  onSubmit: (command: DemoCommand, operatorToken?: string) => void;
 }) {
+  const [useModel, setUseModel] = useState(false);
+  const [operatorToken, setOperatorToken] = useState("");
   const [text, setText] = useState(
     kind === "po"
       ? "Please move follow-ups that fall on weekends to the next business day."
@@ -654,11 +660,16 @@ function Correction({
       className="panel correction"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit({
-          action: "correct",
-          preference: kind === "po" ? "businessDaysOnly" : "includeFreight",
-          text,
-        });
+        const token = operatorToken;
+        setOperatorToken("");
+        onSubmit(
+          {
+            action: useModel ? "learn-with-model" : "correct",
+            preference: kind === "po" ? "businessDaysOnly" : "includeFreight",
+            text,
+          },
+          token,
+        );
       }}
     >
       <span className="eyebrow">TEACH YOUR AGENT</span>
@@ -672,6 +683,29 @@ function Correction({
         required
         maxLength={2000}
       />
+      {developer ? (
+        <label className="model-choice">
+          <input
+            type="checkbox"
+            checked={useModel}
+            onChange={(event) => setUseModel(event.target.checked)}
+          />
+          Use a model to propose this change
+        </label>
+      ) : null}
+      {useModel ? (
+        <label>
+          Operator token
+          <input
+            type="password"
+            autoComplete="off"
+            required
+            value={operatorToken}
+            onChange={(event) => setOperatorToken(event.target.value)}
+            placeholder="Deployment ADMIN_TOKEN"
+          />
+        </label>
+      ) : null}
       <p className="caption">
         This exercise applies{" "}
         {kind === "po" ? "business-day follow-ups" : "freight-inclusive quote comparison"} only if

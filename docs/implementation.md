@@ -89,6 +89,11 @@
 - Both reference corrections now use the generic resumable learning pipeline. Its tests cover
   three-candidate bounds, interrupted generation with retained reservations, held-out exclusion,
   and executable-change review. These built-in correction generators are deterministic.
+- The real-model recovery proof passed on application version `c73ec815-44bc-4509-bae0-06560af2b401`.
+  GLM reused Kimi's generated structure and unchanged helper after compaction and an actual
+  actor restart, read the exact original correction, recomputed the modified quote comparison,
+  and preserved the original analysis. It completed in four steps, 22,004 reported tokens,
+  and 91.0 seconds. This is a contract proof, not a comparative superiority result.
 
 ## Current verification
 

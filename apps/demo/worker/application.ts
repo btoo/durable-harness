@@ -35,6 +35,7 @@ import {
   R2Artifacts,
   durableStore,
   modelData,
+  workersAICandidateGenerator,
 } from "@durable-harness/cloudflare";
 import {
   DEMO_DEPLOYMENT,
@@ -48,6 +49,7 @@ import {
 } from "./domain.js";
 import type { DemoCommand, DemoEnv, ModelRequest, Persona } from "./protocol.js";
 import { personaSchema } from "./protocol.js";
+import { z } from "zod";
 
 export function principalFor(persona: Persona): Principal {
   return {
@@ -100,6 +102,28 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       usedTokens: 0,
     }),
   });
+  private readonly modelGenerator = this.createProposalGenerator();
+  protected createProposalGenerator() {
+    return workersAICandidateGenerator(this.env.AI, this.env.MODEL_ID, {
+      version: "procurement-proposer-v1",
+      instructions:
+        "Only change preference keys explicitly identified by the correction evidence. Keep approvalRequired true. Preserve every unrelated preference.",
+      candidateSchema: z
+        .object({
+          includeFreight: z.boolean(),
+          businessDaysOnly: z.boolean(),
+          approvalRequired: z.literal(true),
+        })
+        .strict(),
+    });
+  }
+  private readonly modelPipeline = new LearningPipeline(
+    this.records,
+    this.learning,
+    this.modelGenerator,
+    { onTransition: (run) => this.learningTransition(run) },
+  );
+  private readonly activeLearning = new Set<string>();
   private readonly budgets = new RunBudgets(this.records);
   private readonly workspace = new DurableWorkspace(
     this.records,
@@ -480,7 +504,13 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         expectedRevision: command.expectedRevision,
       });
     }
-    if (command.action === "correct") {
+    if (command.action === "correct" || command.action === "learn-with-model") {
+      if (command.action === "learn-with-model")
+        invariant(
+          realModelAllowed && persona === "developer",
+          "ACCESS_DENIED",
+          "Starting a model-generated improvement requires the operator token.",
+        );
       const feedbackId = crypto.randomUUID();
       this.workspace.history.append({
         id: feedbackId,
@@ -513,12 +543,19 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         lineage: [],
         corrected: { [command.preference]: true },
       });
-      const learningRun = this.pipeline.start(principal, {
+      const selectedPipeline =
+        command.action === "learn-with-model" ? this.modelPipeline : this.pipeline;
+      const learningRun = selectedPipeline.start(principal, {
         id: feedbackId,
         workspaceId,
         target: "procurement-preferences",
         evidenceIds: [feedbackId],
       });
+      if (command.action === "learn-with-model") {
+        this.records.put("pending_learning", learningRun.id, { id: learningRun.id, persona });
+        await this.wakeLearning();
+        return { learningRunId: learningRun.id, status: "queued" };
+      }
       this.workspace.events.append({
         workspaceId,
         kind: "learning.evaluating",
@@ -557,6 +594,14 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         "ACCESS_DENIED",
         "This improvement belongs to another workspace.",
       );
+      if (run.generatorId === this.modelGenerator.id) {
+        this.records.put("pending_learning", run.id, {
+          id: run.id,
+          persona: personaSchema.parse(run.principalId),
+        });
+        await this.wakeLearning();
+        return { learningRunId: run.id, status: "queued" };
+      }
       return this.pipeline.advance(principalFor(personaSchema.parse(run.principalId)), run.id);
     }
     if (command.action === "approve" || command.action === "reject") {
@@ -887,6 +932,41 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     if (currentAlarm === null || currentAlarm > deadline) await this.ctx.storage.setAlarm(deadline);
     return { remainingMs };
   }
+  private async wakeLearning() {
+    const scheduled = await this.ctx.storage.getAlarm();
+    if (scheduled === null || scheduled > Date.now()) await this.ctx.storage.setAlarm(Date.now());
+  }
+  private learningTransition(run: LearningRun) {
+    const text: Record<LearningRun["status"], string> = {
+      ready: "Your correction is queued for an improvement proposal",
+      generating: "The agent is considering your correction",
+      evaluating: "Checking the proposed change against the existing evaluation cases",
+      awaiting_review: "The proposed change passed its checks and needs review",
+      promoted: "The improvement passed its checks and is active",
+      exhausted: "No verified improvement was found within the attempt limit",
+      interrupted: "The improvement paused; its progress is saved",
+      stale: "The settings changed during this improvement; it needs to be checked again",
+    };
+    this.workspace.events.append({
+      workspaceId: run.workspaceId,
+      kind: `learning.${run.status}`,
+      audience: "customer",
+      text: text[run.status],
+      data: { learningRunId: run.id, attempt: run.attempts, evidence: "real-model" },
+      lineage: run.lineage,
+    });
+  }
+  private async driveLearning(job: { id: string; persona: Persona }) {
+    this.activeLearning.add(job.id);
+    try {
+      await this.modelPipeline.advance(principalFor(job.persona), job.id);
+    } catch {
+      /* The pipeline retains a recoverable, authorized failure state. */
+    } finally {
+      this.records.delete("pending_learning", job.id);
+      this.activeLearning.delete(job.id);
+    }
+  }
   async alarm() {
     let nextDeadline = Infinity;
     for (const run of this.records.list<RootRun>("root_runs")) {
@@ -908,6 +988,10 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         "failed",
         "The root run reached its active execution budget; unsettled usage remains reserved.",
       );
+    }
+    for (const job of this.records.list<{ id: string; persona: Persona }>("pending_learning")) {
+      if (!this.activeLearning.has(job.id)) this.ctx.waitUntil(this.driveLearning(job));
+      nextDeadline = Math.min(nextDeadline, Date.now() + 120_000);
     }
     if (Number.isFinite(nextDeadline)) await this.ctx.storage.setAlarm(nextDeadline);
   }

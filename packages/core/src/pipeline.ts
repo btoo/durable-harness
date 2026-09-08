@@ -28,7 +28,7 @@ export interface CandidateGenerator {
   generate(
     context: CandidateContext,
     execution: { id: string; reservedTokens: number; signal: AbortSignal },
-  ): Promise<{ candidate: unknown; rationale: string; usedTokens: number }>;
+  ): Promise<{ candidate: unknown; rationale: string; usedTokens?: number }>;
 }
 export interface LearningRun {
   id: string;
@@ -65,6 +65,7 @@ export class LearningPipeline {
     private readonly store: RecordStore,
     private readonly learning: Learning,
     private readonly generator: CandidateGenerator,
+    private readonly options: { onTransition?: (run: LearningRun) => void } = {},
   ) {
     invariant(
       generator.maxCandidates === undefined || [1, 2, 3].includes(generator.maxCandidates),
@@ -214,9 +215,9 @@ export class LearningPipeline {
             reservedTokens,
             signal: AbortSignal.timeout(Math.max(1, this.budgets.remainingActiveMs(run.rootId))),
           });
-          if (reservedTokens > 0)
+          if (reservedTokens > 0 && generated.usedTokens !== undefined)
             this.budgets.settle(run.rootId, executionId, generated.usedTokens);
-          else
+          else if (reservedTokens === 0)
             invariant(
               generated.usedTokens === 0,
               "BUDGET_EXCEEDED",
@@ -283,8 +284,12 @@ export class LearningPipeline {
     return evidence as FeedbackSignal[];
   }
   private save(run: LearningRun): LearningRun {
-    this.store.put("learning_runs", run.id, run);
-    return run;
+    return this.store.transaction(() => {
+      const previous = this.store.get<LearningRun>("learning_runs", run.id);
+      this.store.put("learning_runs", run.id, run);
+      if (previous?.status !== run.status) this.options.onTransition?.(run);
+      return run;
+    });
   }
   private pause(run: LearningRun): LearningRun {
     if (run.ownsBudget) this.budgets.pause(run.rootId);

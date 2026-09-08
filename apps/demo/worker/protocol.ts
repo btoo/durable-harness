@@ -78,6 +78,11 @@ export const commandSchema = z.discriminatedUnion("action", [
     input: z.record(z.string(), z.unknown()),
   }),
   z.object({ action: z.literal("run-synthetic") }),
+  z.object({
+    action: z.literal("learn-with-model"),
+    preference: z.enum(["includeFreight", "businessDaysOnly"]),
+    text: z.string().min(1).max(2000),
+  }),
   z.object({ action: z.literal("probe-model") }),
   z.object({ action: z.literal("seed-history") }),
   z.object({ action: z.literal("restart-runtime") }),

@@ -11,6 +11,8 @@
     "@cloudflare/think": "0.17.0",
     "@durable-harness/core": "0.1.0",
     "agents": "0.22.0",
-    "workers-ai-provider": "4.0.0"
+    "workers-ai-provider": "4.0.0",
+    "ai": "7.0.93",
+    "zod": "4.3.6"
   }
 }

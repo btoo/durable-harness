@@ -25,6 +25,50 @@ async function command(cookie: string, body: object, workspace = "northstar-quot
 }
 
 describe("authenticated reference application", () => {
+  it("durably accepts a funded model improvement and changes the next workflow decision", async () => {
+    const customerCookie = await session();
+    const body = {
+      action: "learn-with-model",
+      preference: "includeFreight",
+      text: "Include freight when comparing supplier quotes.",
+    };
+    expect((await command(customerCookie, body)).status).toBe(403);
+    const cookie = await session("developer", customerCookie);
+    await command(cookie, { action: "run-synthetic" });
+    const response = await SELF.fetch("https://demo.test/api/command?workspace=northstar-quoting", {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        authorization: "Bearer test-only-model-admission",
+      },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(200);
+    const queued = (await response.json()) as { learningRunId: string; status: string };
+    expect(queued.status).toBe("queued");
+    await vi.waitFor(
+      async () => {
+        expect(
+          (await state(cookie)).learningRuns.find((run) => run.id === queued.learningRunId)?.status,
+        ).toBe("promoted");
+      },
+      { timeout: 5000, interval: 50 },
+    );
+    const learned = await state(cookie);
+    expect(learned.proposals[0]?.origin).toBe("model_generated");
+    expect(learned.events.some((event) => event.kind === "learning.generating")).toBe(true);
+    expect((learned.configuration!.value as { approvalRequired: boolean }).approvalRequired).toBe(
+      true,
+    );
+    await command(cookie, { action: "run-synthetic" });
+    expect(
+      (await state(cookie)).events.some((event) =>
+        event.text.includes("Brookfield Parts is the lowest-cost"),
+      ),
+    ).toBe(true);
+  });
+
   it("imports an allowed MCP, gates execution through approval, and enforces revocation", async () => {
     let calls = 0;
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {

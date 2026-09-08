@@ -7,3 +7,5 @@ export * from "./provider-stream.js";
 export * from "./mcp.js";
 
 export * from "./step-context.js";
+
+export * from "./proposals.js";

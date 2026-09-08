@@ -103,6 +103,11 @@ export class Learning {
     this.access = new AccessPolicy(store);
     this.targets = new Map(targets.map((target) => [target.name, target]));
     for (const target of targets) {
+      invariant(
+        new Set(target.cases.map((testCase) => testCase.id)).size === target.cases.length,
+        "INVALID_INPUT",
+        "Evaluation case identities must be unique within a target.",
+      );
       const splits = new Map<string, EvaluationCase["split"]>();
       for (const testCase of target.cases) {
         invariant(
@@ -113,6 +118,26 @@ export class Learning {
         splits.set(testCase.family, testCase.split);
       }
     }
+  }
+  candidateContext(principal: Principal, workspaceId: string, targetName: string) {
+    const baseline = this.configuration(principal, workspaceId, targetName);
+    invariant(
+      baseline,
+      "NOT_FOUND",
+      "Initialize this learning target before generating a proposal.",
+    );
+    const target = this.target(targetName);
+    return {
+      baseline,
+      kind: target.kind,
+      adaptationCases: target.cases.filter((testCase) => testCase.split === "adaptation"),
+    };
+  }
+  report(principal: Principal, proposalId: string): EvaluationReport | undefined {
+    const proposal = this.read(principal, proposalId);
+    return proposal.evaluationId
+      ? this.store.get<EvaluationReport>("evaluations", proposal.evaluationId)
+      : undefined;
   }
   configuration(
     principal: Principal,

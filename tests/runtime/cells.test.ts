@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { evictDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { customer, type WorkspaceTestHost } from "./worker.js";
+import { decodeGraph } from "@durable-harness/core";
 
 type TestHost = DurableObjectStub &
   Pick<
@@ -22,6 +23,40 @@ const testEnv = env as unknown as { WORKSPACES: DurableObjectNamespace };
 const host = () => testEnv.WORKSPACES.getByName(crypto.randomUUID()) as TestHost;
 
 describe("code cells in real Dynamic Workers and Durable Object storage", () => {
+  it("returns the final expression and snapshots bounded console output", async () => {
+    const workspace = host();
+    const result = await workspace.run(
+      "const offer = {price:12}; console.log(offer); offer.price = 13; offer;",
+    );
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok || result.cell.output?.kind !== "inline")
+      throw new Error("Expected inline cell output");
+    expect(decodeGraph(result.cell.output.graph).value).toEqual({
+      result: { price: 13 },
+      logs: [{ level: "log", values: [{ price: 12 }] }],
+    });
+    await evictDurableObject(workspace);
+    const restored = await workspace.run("offer.price;");
+    if (!restored.ok || restored.cell.output?.kind !== "inline")
+      throw new Error("Expected restored output");
+    expect(decodeGraph(restored.cell.output.graph).value).toEqual({ result: 13 });
+  });
+  it("retains large expression output as a readable artifact without inflating named state", async () => {
+    const workspace = host();
+    const result = await workspace.run('const retained = 1; "x".repeat(20_000);');
+    if (!result.ok || result.cell.output?.kind !== "artifact")
+      throw new Error(JSON.stringify(result));
+    expect((await workspace.inspect()).bindings.map((binding) => binding.name)).toEqual([
+      "retained",
+    ]);
+    const read = await workspace.run(
+      `const originalOutput = await artifacts.read(${JSON.stringify(result.cell.output.id)}, {length:64000});`,
+    );
+    if (!read.ok) throw new Error(JSON.stringify(read));
+    expect(
+      decodeGraph(JSON.parse((read.values.originalOutput as { text: string }).text)).value,
+    ).toEqual({ result: "x".repeat(20_000) });
+  });
   it("rejects aliased clocks, random sources, dynamic imports, and runtime internals", async () => {
     for (const source of [
       "let timestamp; { const Clock = Date; timestamp = new Clock().toISOString(); }",

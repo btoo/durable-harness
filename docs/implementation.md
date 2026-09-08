@@ -81,6 +81,14 @@
 - Inspection now returns readable JSON for ordinary trees and graph notation for special
   values/references. Retained helper source is inspectable. Evaluation progress now survives
   interruption and is invalidated if the candidate, baseline, cases, or evaluator version changes.
+- The next GLM continuation recovered and retained the exact customer correction but did not
+  finish the helper-reuse task before its context reservation filled. It used 17,926 reported
+  tokens in 56.4 seconds. That trace identified missing console/expression output; the runtime
+  now retains both, with large outputs stored as artifacts. Completed tool rounds can be
+  replaced by retrievable cell-output receipts in the active request.
+- Both reference corrections now use the generic resumable learning pipeline. Its tests cover
+  three-candidate bounds, interrupted generation with retained reservations, held-out exclusion,
+  and executable-change review. These built-in correction generators are deterministic.
 
 ## Current verification
 

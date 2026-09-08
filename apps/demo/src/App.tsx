@@ -479,7 +479,7 @@ export function App() {
                   perform={perform}
                 />
               ) : data ? (
-                <Learning data={data} />
+                <Learning data={data} busy={busy} perform={perform} />
               ) : null}
             </section>
             <aside className="details-column">
@@ -799,6 +799,18 @@ function Workspace({
               <time>{time(cell.createdAt)}</time>
             </summary>
             <pre>{cell.source}</pre>
+            {cell.output ? (
+              <>
+                <h3>Cell output</h3>
+                <pre>
+                  {JSON.stringify(
+                    "format" in cell.output ? cell.output.value : cell.output,
+                    null,
+                    2,
+                  )}
+                </pre>
+              </>
+            ) : null}
             {cell.error ? <p>{cell.error.message}</p> : null}
             {["waiting_connection", "uncertain"].includes(cell.status) ? (
               <button
@@ -816,9 +828,43 @@ function Workspace({
     </>
   );
 }
-function Learning({ data }: { data: DemoState }) {
+function Learning({
+  data,
+  busy,
+  perform,
+}: {
+  data: DemoState;
+  busy: boolean;
+  perform(command: DemoCommand): Promise<void>;
+}) {
   return (
     <>
+      {data.learningRuns.length ? (
+        <section className="panel">
+          <div className="panel-heading">
+            <h2>Learning pipeline</h2>
+            <span className="secondary-label">Progress survives interruption</span>
+          </div>
+          {data.learningRuns.map((run) => (
+            <div className="helper" key={run.id}>
+              <GitBranch size={16} />
+              <strong>{run.status.replaceAll("_", " ")}</strong>
+              <span>
+                {run.attempts} candidate{run.attempts === 1 ? "" : "s"}
+              </span>
+              {run.status === "interrupted" ? (
+                <button
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() => void perform({ action: "resume-learning", runId: run.id })}
+                >
+                  Resume checks
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
       <section className="panel">
         <div className="panel-heading">
           <h2>Corrections & improvements</h2>

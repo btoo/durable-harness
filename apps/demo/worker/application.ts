@@ -10,6 +10,8 @@ import {
   DurableWorkspace,
   HarnessFault,
   Learning,
+  LearningPipeline,
+  type LearningRun,
   Memory,
   RunBudgets,
   asFault,
@@ -84,6 +86,20 @@ export class DemoApplication extends DurableObject<DemoEnv> {
   );
   private readonly memory = new Memory(this.records);
   private readonly learning = new Learning(this.records, [preferencesTarget()]);
+  private readonly pipeline = new LearningPipeline(this.records, this.learning, {
+    id: "synthetic-preference-projection-v1",
+    origin: "customer_correction",
+    maxCandidates: 1,
+    reserveTokens: () => 0,
+    generate: async (context) => ({
+      candidate: {
+        ...(context.baseline as ProcurementPreferences),
+        ...Object.assign({}, ...context.evidence.map((item) => item.corrected ?? {})),
+      },
+      rationale: context.evidence.at(-1)!.text,
+      usedTokens: 0,
+    }),
+  });
   private readonly budgets = new RunBudgets(this.records);
   private readonly workspace = new DurableWorkspace(
     this.records,
@@ -171,7 +187,11 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.workspace.access.require(principal, selected, "read");
     const cells = this.records
       .list<CellRecord>("cells")
-      .filter((cell) => cell.workspaceId === selected);
+      .filter(
+        (cell) =>
+          cell.workspaceId === selected &&
+          this.workspace.access.visible(principal, selected, cell.lineage ?? cell.starting.lineage),
+      );
     const pending = this.records
       .list<OperationRecord>("operations")
       .filter(
@@ -208,6 +228,13 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       pending,
       configuration: this.learning.configuration(principal, selected, "procurement-preferences"),
       proposals: this.learning.list(principal, selected),
+      learningRuns: this.records
+        .list<LearningRun>("learning_runs")
+        .filter(
+          (run) =>
+            run.workspaceId === selected &&
+            this.workspace.access.visible(principal, selected, run.lineage),
+        ),
       clusters: this.learning.clusters(principal, selected),
       memories: this.memory
         .list(principal, selected)
@@ -216,9 +243,24 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         id: cell.id,
         status: cell.status,
         revision: cell.committedRevision,
-        error: cell.error,
+        error: cell.error
+          ? {
+              code: cell.error.code,
+              message:
+                persona === "developer"
+                  ? cell.error.message
+                  : "This cell stopped. Its saved progress and recorded actions remain available.",
+            }
+          : undefined,
         createdAt: cell.createdAt,
-        ...(persona === "developer" ? { source: cell.source, attempt: cell.attempt } : {}),
+        ...(persona === "developer"
+          ? {
+              source: cell.source,
+              attempt: cell.attempt,
+              output:
+                cell.output?.kind === "inline" ? inspectGraph(cell.output.graph) : cell.output,
+            }
+          : {}),
       })),
       ...(persona === "developer"
         ? {
@@ -471,37 +513,24 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         lineage: [],
         corrected: { [command.preference]: true },
       });
-      const baseline = this.learning.configuration(
-        principal,
+      const learningRun = this.pipeline.start(principal, {
+        id: feedbackId,
         workspaceId,
-        "procurement-preferences",
-      )!;
-      const candidate = {
-        ...(baseline.value as ProcurementPreferences),
-        [command.preference]: true,
-      };
-      const proposal = this.learning.propose(principal, {
-        workspaceId,
-        kind: "instruction",
         target: "procurement-preferences",
-        baseRevision: baseline.revision,
-        candidate,
-        rationale: command.text,
         evidenceIds: [feedbackId],
-        lineage: [{ spaceId: workspaceId, itemId: feedbackId }],
-        origin: "customer_correction",
       });
       this.workspace.events.append({
         workspaceId,
         kind: "learning.evaluating",
         audience: "customer",
         text: "Testing your correction against the existing procurement checks",
-        data: { proposalId: proposal.id },
+        data: { learningRunId: learningRun.id },
         lineage: [],
       });
-      const evaluation = await this.learning.evaluate(principal, proposal.id);
-      if (evaluation.eligible) {
-        await this.learning.promote(principal, proposal.id);
+      const completed = await this.pipeline.advance(principal, learningRun.id);
+      const proposal = this.learning.read(principal, completed.proposalIds.at(-1)!);
+      const evaluation = this.learning.report(principal, proposal.id)!;
+      if (completed.status === "promoted") {
         this.workspace.events.append({
           workspaceId,
           kind: "learning.promoted",
@@ -519,7 +548,16 @@ export class DemoApplication extends DurableObject<DemoEnv> {
           data: { proposalId: proposal.id },
           lineage: [],
         });
-      return { proposal: this.learning.read(principal, proposal.id), evaluation };
+      return { proposal, evaluation, learningRun: completed };
+    }
+    if (command.action === "resume-learning") {
+      const run = this.pipeline.read(principal, command.runId);
+      invariant(
+        run.workspaceId === workspaceId,
+        "ACCESS_DENIED",
+        "This improvement belongs to another workspace.",
+      );
+      return this.pipeline.advance(principalFor(personaSchema.parse(run.principalId)), run.id);
     }
     if (command.action === "approve" || command.action === "reject") {
       if (command.action === "reject") {
@@ -775,6 +813,30 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       ...inspectGraph(this.workspace.readBinding(principal, request.workspaceId, binding, path)),
     };
   }
+  modelOutput(rootId: string, cellId: string) {
+    const request = this.modelRequest(rootId);
+    const principal = principalFor(request.principalId as Persona);
+    const cell = this.records.get<CellRecord>("cells", cellId);
+    invariant(
+      cell?.workspaceId === request.workspaceId,
+      "NOT_FOUND",
+      "No cell output belongs to this workspace with that identity.",
+    );
+    this.workspace.access.requireSources(principal, cell.lineage ?? cell.starting.lineage);
+    return {
+      cellId,
+      status: cell.status,
+      output: cell.output?.kind === "inline" ? inspectGraph(cell.output.graph) : cell.output,
+    };
+  }
+  modelRemaining(rootId: string) {
+    this.modelRequest(rootId);
+    const run = this.budgets.read(rootId);
+    return {
+      remainingTokens: run.limits.tokens - run.usedTokens - run.reservedTokens,
+      remainingActiveMs: this.budgets.remainingActiveMs(rootId),
+    };
+  }
   async modelPrepared(
     rootId: string,
     instructions: string,
@@ -890,10 +952,19 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       ? {
           cellId,
           revision: result.workspace.revision,
-          namespace: this.workspace.inspect(
-            principalFor(request.principalId as Persona),
-            request.workspaceId,
-          ),
+          ...(result.cell.output
+            ? {
+                output:
+                  result.cell.output.kind === "inline"
+                    ? inspectGraph(result.cell.output.graph)
+                    : result.cell.output,
+              }
+            : {}),
+          bindings: Object.keys(result.workspace.graph.roots),
+          helpers: Object.values(result.workspace.functions).map(({ name, version }) => ({
+            name,
+            version,
+          })),
         }
       : result;
   }

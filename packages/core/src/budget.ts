@@ -59,6 +59,18 @@ export class RunBudgets {
     invariant(run, "NOT_FOUND", "The root run does not exist.");
     return run;
   }
+  requireActive(id: string): void {
+    const run = this.read(id);
+    invariant(
+      run.status === "active" && this.elapsed(run) < run.limits.activeMs,
+      "BUDGET_EXCEEDED",
+      "This root run has no active execution budget remaining.",
+    );
+  }
+  remainingActiveMs(id: string): number {
+    const run = this.read(id);
+    return Math.max(0, run.limits.activeMs - this.elapsed(run));
+  }
   reserve(id: string, stepId: string, maxTokens: number): void {
     invariant(
       Number.isInteger(maxTokens) && maxTokens > 0,

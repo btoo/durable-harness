@@ -12,7 +12,7 @@ import {
 import { tool } from "ai";
 import { z } from "zod";
 import { invariant } from "@durable-harness/core";
-import { canonicalWorkersAI, modelData } from "@durable-harness/cloudflare";
+import { canonicalWorkersAI, modelData, reduceStepContext } from "@durable-harness/cloudflare";
 import { application, type DemoEnv, type ModelRequest } from "./protocol.js";
 
 /** Think owns turn admission; durable-harness owns authorized cells and their journal. */
@@ -58,25 +58,30 @@ export class HarnessThink extends Think<DemoEnv> {
     return {
       inspectWorkspace: tool({
         description:
-          "Inspect one named binding or helper source, or omit binding to read the concise namespace index and customer preferences. Read only the items needed for the current task.",
+          "Inspect one named binding or helper source, or omit binding to read the concise namespace index and customer preferences. Use cellId to retrieve a previous cell’s exact output. Read only the items needed for the current task.",
         inputSchema: z.object({
           binding: z.string().optional(),
+          cellId: z.string().optional(),
           path: z.array(z.union([z.string(), z.number()])).optional(),
         }),
-        execute: async ({ binding, path }) =>
-          binding
+        execute: async ({ binding, path, cellId }) =>
+          cellId
             ? modelData(
-                await (
-                  await this.application()
-                ).modelBinding((await this.request()).rootId, binding, path),
+                await (await this.application()).modelOutput((await this.request()).rootId, cellId),
               )
-            : modelData(
-                await (await this.application()).modelContext((await this.request()).rootId),
-              ),
+            : binding
+              ? modelData(
+                  await (
+                    await this.application()
+                  ).modelBinding((await this.request()).rootId, binding, path),
+                )
+              : modelData(
+                  await (await this.application()).modelContext((await this.request()).rootId),
+                ),
       }),
       executeCell: tool({
         description:
-          "Execute a complete TypeScript cell, with real values and function bodies. Top-level const/let bindings and function declarations persist automatically after success. Declare a helper as function name(arguments) { body }; pass mutable data as arguments. memory.write({title,kind,value}) stores serializable knowledge, and cannot store functions. Use tools.search(query), tools.describe(name), and await tools.call(name,input) for capabilities. history.search/read/around retrieves originals; artifacts.write/read retains large data. Use runtime.now/uuid/random for nondeterminism. An approval or connection pause preserves the cell identity and settled operations. Resume that recorded cell after the wait is resolved.",
+          "Execute a complete TypeScript cell. Top-level const/let bindings and function declarations persist after success. The last expression and up to 20 console entries are returned; large outputs become artifact handles. Declare helpers with explicit arguments; pass mutable data as arguments. memory.write({title,kind,value}) stores data, not functions. Use tools.search(query), tools.describe(name), and await tools.call(name,input) for capabilities. history.search/read/around retrieves originals; artifacts.write/read retains large data. Use runtime.now/uuid/random for nondeterminism. Approval or connection pauses preserve the cell identity and settled operations; resume the same recorded cell afterward.",
         inputSchema: z.object({ source: z.string().min(1).max(16_000) }),
         execute: async ({ source }, { toolCallId }) =>
           modelData(
@@ -121,13 +126,11 @@ export class HarnessThink extends Think<DemoEnv> {
     this.mirroredFields = 0;
     const request = await this.request();
     const stepId = `${request.rootId}:${this.attempt}:${context.stepNumber}`;
-    // Think retains original messages. Repeated private reasoning is not needed in the
-    // next request; preserve text, tool calls, and their exact settled results.
-    const messages = context.messages.flatMap((message) => {
-      if (message.role !== "assistant" || typeof message.content === "string") return [message];
-      const content = message.content.filter((part) => part.type !== "reasoning");
-      return content.length ? [{ ...message, content }] : [];
-    });
+    const { remainingTokens } = await (await this.application()).modelRemaining(request.rootId);
+    const { messages } = reduceStepContext(
+      context.messages,
+      remainingTokens - this.inputOverhead - this.responseTokenLimit,
+    );
     // Reserve conservatively from the complete UTF-8 input plus the full output allowance.
     const estimate =
       new TextEncoder().encode(JSON.stringify(messages)).byteLength +

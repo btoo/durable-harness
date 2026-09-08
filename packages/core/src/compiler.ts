@@ -6,7 +6,7 @@ import { decodeGraph, encodeGraph } from "./codec.js";
 import { HarnessFault, invariant } from "./errors.js";
 import type { FunctionModule, WorkspaceSnapshot } from "./types.js";
 
-const runtimeNames = new Set(["tools", "runtime", "history", "memory", "artifacts"]);
+const runtimeNames = new Set(["tools", "runtime", "history", "memory", "artifacts", "console"]);
 const globals = new Set([
   "Array",
   "Object",
@@ -273,11 +273,23 @@ export async function compileCell(
     .map((name) => `let ${name} = __dhRoots[${JSON.stringify(name)}];`)
     .join("\n");
   const names = [...dataNames].sort();
+  const last = ast.program.body.at(-1);
+  const hasResult = t.isExpressionStatement(last);
+  const executed = hasResult
+    ? source.slice(0, last.start!) +
+      `const __dhValue = (${source.slice(last.expression.start!, last.expression.end!)});`
+    : source + "\nconst __dhValue = undefined;";
   const code = `async () => {
     (${hardenCellGlobals.toString()})();
     const __dhDecode = ${decodeGraph.toString()};
     const __dhEncode = ${encodeGraph.toString()};
     const __dhRoots = __dhDecode(${JSON.stringify(starting.graph)});
+    const __dhLogs = [];
+    let __dhOmittedLogs = 0;
+    const console = Object.fromEntries(["log", "info", "warn", "error"].map(level => [level, (...values) => {
+      if (__dhLogs.length >= 20) { __dhOmittedLogs++; return; }
+      __dhLogs.push({level, values: __dhDecode(__dhEncode({value:values.map(value => typeof value === "function" ? "[Function " + value.name + "]" : value instanceof Error ? String(value) : value)})).value});
+    }]));
     const tools = { call: (name, input) => host.invoke(name, input), search: (query) => host.invoke("@tools.search", {query}), describe: (name) => host.invoke("@tools.describe", {name}) };
     const runtime = { now: () => host.invoke("@runtime.now", {}), uuid: () => host.invoke("@runtime.uuid", {}), random: () => host.invoke("@runtime.random", {}), progress: (text) => host.invoke("@runtime.progress", {text}) };
     const history = { search: (query) => host.invoke("@history.search", {query}), read: (id) => host.invoke("@history.read", {id}), around: (id) => host.invoke("@history.around", {id}) };
@@ -286,8 +298,8 @@ export async function compileCell(
     const __dhModuleCache = new Map();
     const __dhFactories = {${factories}};
     const __dhModule = version => { if (!__dhModuleCache.has(version)) __dhModuleCache.set(version, __dhFactories[version]()); return __dhModuleCache.get(version); };
-    ${prelude}\n${definitions.join("\n")}\n${transpile(source)}
-    return { graph: __dhEncode({${names.map((name) => `${JSON.stringify(name)}:${name}`).join(",")}}) };
+    ${prelude}\n${definitions.join("\n")}\n${transpile(executed)}
+    return { graph: __dhEncode({${names.map((name) => `${JSON.stringify(name)}:${name}`).join(",")}}), output: __dhEncode({value: { ...(__dhValue !== undefined ? {result:__dhValue} : {}), ...(__dhLogs.length ? {logs:__dhLogs} : {}), ...(__dhOmittedLogs ? {omittedLogs:__dhOmittedLogs} : {})}}) };
   }`;
   return { code, functions: modules, modules: archive, names };
 }

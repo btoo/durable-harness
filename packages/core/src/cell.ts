@@ -461,6 +461,30 @@ export class DurableWorkspace {
         "BUDGET_EXCEEDED",
         "Retained state is too large. Write large data to an artifact and keep its handle.",
       );
+      const outputGraph = (result as { output?: ValueGraph }).output;
+      let output: CellRecord["output"];
+      if (outputGraph) {
+        decodeGraph(outputGraph);
+        const serialized = JSON.stringify(outputGraph);
+        if (new TextEncoder().encode(serialized).byteLength > 16_000) {
+          invariant(
+            this.artifacts,
+            "BUDGET_EXCEEDED",
+            "This cell output needs an artifact backend. Configure artifacts or return a smaller projection.",
+          );
+          output = await this.artifacts.write(
+            principal,
+            {
+              spaceId: workspaceId,
+              name: `cell-output-${id.slice(0, 100)}.json`,
+              text: serialized,
+              contentType: "application/vnd.durable-harness.graph+json",
+            },
+            uniqueSources(lineage),
+            `${id}:output`,
+          );
+        } else output = { kind: "inline", graph: outputGraph };
+      }
       await this.beforeOperation?.();
       this.access.require(principal, workspaceId, "write");
       this.access.requireSources(principal, lineage);
@@ -482,7 +506,9 @@ export class DurableWorkspace {
           ...cell,
           status: "committed",
           committedRevision: snapshot.revision,
+          lineage: uniqueSources(lineage),
           updatedAt: new Date().toISOString(),
+          ...(output ? { output } : {}),
         };
         this.store.put("workspaces", workspaceId, snapshot);
         this.store.put("workspace_revisions", `${workspaceId}:${snapshot.revision}`, snapshot);
@@ -520,6 +546,7 @@ export class DurableWorkspace {
               : "failed";
       const failed: CellRecord = {
         ...cell,
+        lineage: uniqueSources(lineage),
         status,
         error: { code: fault.code, message: fault.message },
         updatedAt: new Date().toISOString(),

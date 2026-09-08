@@ -41,6 +41,11 @@ All calls are asynchronous and journaled. Memory/artifact writes target the curr
 workspace. Artifact reads default to 16,000 bytes, with a 64,000-byte maximum. Memory
 values are limited to 64 KB; artifacts to 10 MB in this experiment.
 
+Cells return their final expression and snapshot up to 20 `console.log/info/warn/error`
+entries. This output is committed with the workspace revision. Outputs over 16 KB become
+artifact handles; inspect or read those handles instead of inserting the full value into
+the model context. Additional console entries are counted as omitted.
+
 ```ts
 const exception = await memory.write({
   title: "Receiving hours",
@@ -104,6 +109,18 @@ success, and the exact evaluated candidate. Memory and instruction changes can p
 automatically; other kinds require review. Related variants stay in one data split.
 Held-out cases are excluded from candidate validation and the reference API.
 
+`LearningPipeline` drives bounded refinement using a developer-supplied `CandidateGenerator`.
+Start a run with a workspace, target, and 1–20 evidence IDs, then call `advance` to resume it.
+The generator receives adaptation cases and previous validation reports; held-out answers
+are excluded. Each model attempt reserves tokens first. Interrupted usage remains reserved,
+and no improvement may attempt more than three candidates. Deterministic generators declare
+zero model usage and may use a smaller attempt limit.
+
+Evaluation checkpoints persist individual case scores. Resumption reuses them only for
+the same candidate, baseline, evaluation cases, and evaluator version. Eligible instruction
+and memory changes promote automatically. Other change kinds pause for review. The PO and
+quoting correction exercises both use this pipeline with a labeled deterministic generator.
+
 Customer variations are configuration versions. Generated code-package publication,
 state-schema migrations, and infrastructure deployment are not yet implemented.
 
@@ -155,3 +172,8 @@ Original provider messages from new runs are archived before repeated reasoning 
 from subsequent requests. Developers can use the `read-model-step` command with `rootId`,
 `stepId`, and optional `offset`/`length` for bounded reads (16,000 characters by default;
 64,000 maximum). Customer sessions cannot read those internal provider messages.
+
+When a request would exceed its remaining reservation, the Cloudflare adapter can replace
+older completed tool rounds with durable receipts while retaining the goal and latest
+call/result pair. `inspectWorkspace({cellId})` retrieves the saved cell output under current
+permissions. This reduces repeated context without deleting the original records.

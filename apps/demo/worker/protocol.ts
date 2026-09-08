@@ -32,6 +32,8 @@ export type ApplicationStub = DurableObjectStub &
     | "subscribe"
     | "modelContext"
     | "modelBinding"
+    | "modelOutput"
+    | "modelRemaining"
     | "modelPrepared"
     | "modelActivate"
     | "modelReserve"
@@ -46,6 +48,7 @@ export function application(env: DemoEnv, sandbox: string): ApplicationStub {
 export const personaSchema = z.enum(["northstar", "cedar", "developer"]);
 export type Persona = z.infer<typeof personaSchema>;
 export const commandSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("resume-learning"), runId: z.string().uuid() }),
   z.object({
     action: z.literal("read-model-step"),
     rootId: z.string().uuid(),

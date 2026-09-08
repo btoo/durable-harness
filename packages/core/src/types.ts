@@ -1,4 +1,5 @@
 import type { ValueGraph } from "./codec.js";
+import type { ArtifactHandle } from "./artifacts.js";
 
 export interface Principal {
   id: string;
@@ -49,12 +50,14 @@ export interface CellRecord {
   principalId: string;
   source: string;
   starting: WorkspaceSnapshot;
+  lineage?: SourceRef[];
   status: CellStatus;
   createdAt: string;
   updatedAt: string;
   attempt: number;
   error?: { code: string; message: string };
   committedRevision?: number;
+  output?: { kind: "inline"; graph: ValueGraph } | ArtifactHandle;
 }
 export interface ToolDefinition {
   name: string;

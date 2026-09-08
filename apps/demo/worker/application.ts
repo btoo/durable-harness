@@ -200,6 +200,12 @@ export class DemoApplication extends DurableObject<DemoEnv> {
               errors: unknown[];
               finishReason: string;
               mirroredFields?: number;
+              modelId?: string;
+              usage?: {
+                inputTokens: number | null;
+                outputTokens: number | null;
+                totalTokens: number | null;
+              };
             }>("model_steps"),
           }
         : {}),
@@ -470,7 +476,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
         .run(request)
         .catch((error) => this.modelEvent(rootId, "failed", asFault(error).message)),
     );
-    return { rootId, status: "running" };
+    return { rootId, status: "running", modelId: this.env.MODEL_ID };
   }
 
   private async execute(principal: Principal, workspaceId: string, source: string, id: string) {
@@ -560,6 +566,12 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       errors: unknown[];
       finishReason: string;
       mirroredFields?: number;
+      modelId?: string;
+      usage?: {
+        inputTokens: number | null;
+        outputTokens: number | null;
+        totalTokens: number | null;
+      };
     },
   ): void {
     this.modelRequest(rootId);
@@ -595,13 +607,11 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     const principal = principalFor(request.principalId as Persona);
     const lineage = this.workspace.snapshot(principal, request.workspaceId).lineage;
     if (this.records.get("model_terminals", rootId)) return;
-    const run = this.budgets.read(rootId);
     const lastStep = this.records
       .list<{ rootId: string; finishReason: string }>("model_steps")
       .filter((step) => step.rootId === rootId)
       .at(-1);
-    if (kind === "completed" && run.steps >= run.limits.steps && lastStep?.finishReason !== "stop")
-      kind = "interrupted";
+    if (kind === "completed" && lastStep && lastStep.finishReason !== "stop") kind = "interrupted";
     if (chunkId && this.records.get("model_chunks", chunkId)) return;
     const previous = this.records.get<string>("model_text", rootId) ?? "";
     const content = kind === "delta" ? previous + text : previous;

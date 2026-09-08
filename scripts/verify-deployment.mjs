@@ -83,9 +83,17 @@ if (process.argv.includes("--model")) {
     { authorization: `Bearer ${secrets.ADMIN_TOKEN}` },
   );
   assert.equal(response.status, 200, JSON.stringify(response.data));
-  proof.model = { rootId: response.data.rootId, status: response.data.status };
-  // Explicit verification only: a finite one-minute observation, not a background monitor.
-  for (let attempt = 0; attempt < 30; attempt++) {
+  const sessionData = JSON.parse(
+    Buffer.from(cookie.split("=")[1].split(".")[0], "base64url").toString(),
+  );
+  proof.model = {
+    rootId: response.data.rootId,
+    modelId: response.data.modelId,
+    sandboxId: sessionData.sandbox,
+    status: response.data.status,
+  };
+  // Observe longer than the two-minute execution budget; preserve diagnostics even on timeout.
+  for (let attempt = 0; attempt < 75; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const state = (await api("/api/state?workspace=northstar-quoting")).data;
     const terminal = state.events.findLast(
@@ -93,18 +101,25 @@ if (process.argv.includes("--model")) {
         event.data.rootId === proof.model.rootId &&
         ["model.completed", "model.failed", "model.interrupted"].includes(event.kind),
     );
-    if (terminal) {
-      proof.model = {
-        ...proof.model,
-        status: terminal.kind,
-        namespace: state.workspace,
-        run: state.runs.find((run) => run.id === proof.model.rootId),
-        events: state.events.filter((event) => event.data.rootId === proof.model.rootId),
-        cells: state.cells,
-        steps: state.modelSteps.filter((step) => step.rootId === proof.model.rootId),
-      };
-      break;
-    }
+    proof.model = {
+      ...proof.model,
+      status: terminal?.kind ?? "running",
+      namespace: state.workspace,
+      run: state.runs.find((run) => run.id === proof.model.rootId),
+      events: state.events.filter((event) => event.data.rootId === proof.model.rootId),
+      cells: state.cells,
+      steps: state.modelSteps.filter((step) => step.rootId === proof.model.rootId),
+    };
+    if (attempt % 10 === 0)
+      console.log(
+        JSON.stringify({
+          rootId: proof.model.rootId,
+          status: proof.model.status,
+          steps: proof.model.run?.steps,
+          cells: proof.model.cells.length,
+        }),
+      );
+    if (terminal) break;
   }
   const newBindings =
     proof.model.namespace?.bindings.filter(

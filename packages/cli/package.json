@@ -1,0 +1,9 @@
+{
+  "name": "@durable-harness/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@durable-harness/observation": "0.1.0"
+  }
+}

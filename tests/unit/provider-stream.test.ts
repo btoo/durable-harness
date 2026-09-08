@@ -1,6 +1,50 @@
 import { expect, it } from "vitest";
 import { createWorkersAI } from "workers-ai-provider";
 import captured from "../fixtures/workers-ai-mirrored-stream.json";
+
+it("matches typed native fragments using their emitted argument bytes", async () => {
+  const fragments: unknown[] = ['{"source":"const result = ', 42, "; const item = ", {}, ';"}'];
+  const frames = [
+    {
+      tool_calls: [{ name: "executeCell" }],
+      choices: [
+        { delta: { tool_calls: [{ index: 0, id: "call", function: { name: "executeCell" } }] } },
+      ],
+    },
+    ...fragments.map((value) => ({
+      tool_calls: [{ arguments: value }],
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                function: { arguments: typeof value === "string" ? value : JSON.stringify(value) },
+              },
+            ],
+          },
+        },
+      ],
+    })),
+  ];
+  const wire =
+    frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join("") + "data: [DONE]\n\n";
+  const binding = {
+    run: async () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(wire));
+          controller.close();
+        },
+      }),
+  } as unknown as Ai;
+  const response = await createWorkersAI({ binding: canonicalWorkersAI(binding) })(
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  ).doStream({ prompt: [{ role: "user", content: [{ type: "text", text: "Create a cell." }] }] });
+  let input = "";
+  for await (const part of response.stream) if (part.type === "tool-call") input = part.input;
+  expect(JSON.parse(input)).toEqual({ source: "const result = 42; const item = {};" });
+});
 import {
   canonicalWorkersAI,
   canonicalWorkersAIStream,

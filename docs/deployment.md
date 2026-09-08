@@ -11,7 +11,7 @@ datasets to the public demo.
 
 Current cost references: [Workers](https://developers.cloudflare.com/workers/platform/pricing/),
 [R2](https://developers.cloudflare.com/r2/pricing/), and
-[the default model](https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/).
+[the default coding model](https://developers.cloudflare.com/workers-ai/models/kimi-k2.7-code/).
 Local deterministic tests do not invoke a model.
 
 ```sh

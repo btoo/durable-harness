@@ -17,10 +17,13 @@ function mirroredCalls(native: unknown[], compatible: unknown[]): boolean {
       (left.index ?? index) === (right.index ?? index) &&
       (left.id == null || right.id == null || left.id === right.id) &&
       (left.function?.name ?? left.name ?? null) === (right.function?.name ?? right.name ?? null) &&
-      JSON.stringify(left.function?.arguments ?? left.arguments ?? null) ===
-        JSON.stringify(right.function?.arguments ?? right.arguments ?? null)
+      argumentBytes(left.function?.arguments ?? left.arguments) ===
+        argumentBytes(right.function?.arguments ?? right.arguments)
     );
   });
+}
+function argumentBytes(value: unknown): string | null {
+  return value == null ? null : typeof value === "string" ? value : JSON.stringify(value);
 }
 
 /** Normalize only exact mirrors within one SSE event, never repeated tokens across events. */

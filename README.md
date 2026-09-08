@@ -83,6 +83,9 @@ See the [API guide](docs/api.md), [deployment guide](docs/deployment.md), and
 [implementation ledger](docs/implementation.md). Packages currently export workspace
 source; npm publication is not yet available.
 
+The [private observation CLI](docs/observation.md) supports bounded, GET-only collection
+and explicitly launched watch mode, with evidence kept outside Git.
+
 ## Verification
 
 ```sh

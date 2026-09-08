@@ -23,7 +23,12 @@ export class HarnessThink extends Think<DemoEnv> {
     });
   }
   getModel(): ThinkModel {
-    return "@cf/meta/llama-3.3-70b-instruct-fp8-fast" as const;
+    invariant(
+      typeof this.env.MODEL_ID === "string" && this.env.MODEL_ID.includes("/"),
+      "NOT_CONFIGURED",
+      "Set MODEL_ID to a model identifier from the Cloudflare catalog.",
+    );
+    return this.env.MODEL_ID as ThinkModel;
   }
   private request(): ModelRequest {
     const request = this.activeTurnMetadata as unknown as ModelRequest | undefined;
@@ -51,7 +56,7 @@ export class HarnessThink extends Think<DemoEnv> {
       }),
       executeCell: tool({
         description:
-          "Execute a sandboxed TypeScript cell. Top-level named data persists after success. Retained helpers must take mutable data as arguments. Use tools.search/describe/call for authorized capabilities; history.search/read/around for originals; memory.read/write and artifacts.read/write for retained knowledge. Use runtime.now/uuid/random for nondeterminism. An approval or connection pause preserves the cell identity and settled operations. Do not repeat a paused action in a new cell.",
+          "Execute a complete TypeScript cell, with real values and function bodies. Top-level const/let bindings and function declarations persist automatically after success. Declare a helper as function name(arguments) { body }; pass mutable data as arguments. memory.write({title,kind,value}) stores serializable knowledge, and cannot store functions. Use tools.search(query), tools.describe(name), and await tools.call(name,input) for capabilities. history.search/read/around retrieves originals; artifacts.write/read retains large data. Use runtime.now/uuid/random for nondeterminism. An approval or connection pause preserves the cell identity and settled operations. Resume that recorded cell after the wait is resolved.",
         inputSchema: z.object({ source: z.string().min(1).max(16_000) }),
         execute: async ({ source }, { toolCallId }) =>
           modelData(await this.application().modelCell(this.request().rootId, source, toolCallId)),
@@ -92,6 +97,12 @@ export class HarnessThink extends Think<DemoEnv> {
     if (stepId)
       await this.application().modelStep(request.rootId, stepId, {
         mirroredFields: this.mirroredFields,
+        modelId: context.response.modelId,
+        usage: {
+          inputTokens: context.usage.inputTokens ?? null,
+          outputTokens: context.usage.outputTokens ?? null,
+          totalTokens: context.usage.totalTokens ?? null,
+        },
         finishReason: context.finishReason,
         calls: context.toolCalls.map((call) => ({ name: call.toolName, input: call.input })),
         results: context.toolResults.map((result) => ({

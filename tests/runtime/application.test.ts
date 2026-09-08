@@ -25,6 +25,34 @@ async function command(cookie: string, body: object, workspace = "northstar-quot
 }
 
 describe("authenticated reference application", () => {
+  it("delegates quote checks to durable supplier agents and retains their relationships after restart", async () => {
+    const cookie = await session("developer");
+    const ran = await command(cookie, { action: "run-synthetic" });
+    expect(ran.status, await ran.clone().text()).toBe(200);
+    const before = await state(cookie);
+    expect(before.agents).toHaveLength(3);
+    expect(
+      before.agents
+        .filter((agent) => agent.parentId !== null)
+        .every((agent) => agent.status === "completed"),
+    ).toBe(true);
+    expect(before.runs?.[0]?.descendants).toBe(2);
+    const restarted = await SELF.fetch(
+      "https://demo.test/api/command?workspace=northstar-quoting",
+      {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          authorization: "Bearer test-only-model-admission",
+        },
+        body: JSON.stringify({ action: "restart-runtime" }),
+      },
+    );
+    expect(restarted.status).toBe(200);
+    expect((await state(cookie)).agents).toEqual(before.agents);
+  });
+
   it("durably accepts a funded model improvement and changes the next workflow decision", async () => {
     const customerCookie = await session();
     const body = {

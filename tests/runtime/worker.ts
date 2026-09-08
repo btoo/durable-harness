@@ -12,7 +12,7 @@ import {
 import { CloudflareCellExecutor, R2Artifacts, durableStore } from "@durable-harness/cloudflare";
 import demoWorker from "../../apps/demo/worker/index.js";
 import type { DemoEnv } from "../../apps/demo/worker/protocol.js";
-export { HarnessThink } from "../../apps/demo/worker/index.js";
+export { HarnessThink, SupplierAgent } from "../../apps/demo/worker/index.js";
 export { TestHarnessThink } from "./model.js";
 export { TestDemoApplication } from "./test-application.js";
 export { McpTestHost } from "./mcp-host.js";

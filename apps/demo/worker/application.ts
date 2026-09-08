@@ -1,9 +1,11 @@
+import type { SupplierOffer } from "./supplier.js";
 import { DurableObject } from "cloudflare:workers";
 import { getAgentByName } from "agents";
 import { Lifecycle } from "agents/lifecycle";
 import { MCPClientManager } from "agents/mcp/client";
 import {
   Artifacts,
+  AgentRegistry,
   ContextManager,
   DEFAULT_RUN_LIMITS,
   Connections,
@@ -25,6 +27,7 @@ import {
   type OperationRecord,
   type Principal,
   type RootRun,
+  type ToolDefinition,
 } from "@durable-harness/core";
 import {
   CloudflareCellExecutor,
@@ -86,6 +89,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     new EncryptedCredentialVault(this.secrets),
     this.mcpTransport,
   );
+  private readonly agents = new AgentRegistry(this.records);
   private readonly memory = new Memory(this.records);
   private readonly learning = new Learning(this.records, [preferencesTarget()]);
   private readonly pipeline = new LearningPipeline(this.records, this.learning, {
@@ -129,7 +133,10 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     this.records,
     new CloudflareCellExecutor(this.env.LOADER),
     {
-      tools: () => [...domainTools(this.records), ...this.connections.capabilities()],
+      tools: () => [
+        ...domainTools(this.records, (input, context) => this.verifySuppliers(input, context)),
+        ...this.connections.capabilities(),
+      ],
       memory: this.memory,
       artifacts: new Artifacts(this.records, new R2Artifacts(this.env.ARTIFACTS)),
       publish: (event) => this.publish(event),
@@ -252,6 +259,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       pending,
       configuration: this.learning.configuration(principal, selected, "procurement-preferences"),
       proposals: this.learning.list(principal, selected),
+      agents: this.agents.list(principal, selected),
       learningRuns: this.records
         .list<LearningRun>("learning_runs")
         .filter(
@@ -776,9 +784,58 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       lineage: [],
     });
   }
+  private async verifySuppliers(input: unknown, context: Parameters<ToolDefinition["execute"]>[1]) {
+    const cellId = context.operationId.slice(0, context.operationId.lastIndexOf(":"));
+    const modelRoot = this.records.get<string>("model_cell_roots", cellId);
+    const rootId = modelRoot ?? cellId;
+    if (!modelRoot) {
+      this.budgets.start(rootId);
+      this.records.put("synthetic_agent_roots", cellId, { rootId });
+    }
+    const lineage =
+      this.records.get<OperationRecord>("operations", context.operationId)?.lineage ?? [];
+    this.agents.create(context.principal, {
+      id: rootId,
+      name: "Quoting coordinator",
+      rootId,
+      workspaceId: context.workspaceId,
+      scopes: [{ spaceId: context.workspaceId, permissions: ["read", "write", "execute"] }],
+      lineage,
+    });
+    const coordinator = this.agents.principal(context.principal, rootId);
+    const outputs = [];
+    for (const [index, offer] of (input as { offers: SupplierOffer[] }).offers.entries()) {
+      const id = `${context.operationId}:supplier:${index}`;
+      const handle = this.agents.create(coordinator, {
+        id,
+        name: `${offer.supplier} check`,
+        rootId,
+        workspaceId: context.workspaceId,
+        scopes: [{ spaceId: context.workspaceId, permissions: ["read"] }],
+        lineage,
+      });
+      this.agents.send(coordinator, id, { id: `${id}:request`, value: { offer }, lineage });
+      const identity = this.agents.principal(coordinator, id);
+      const child = await getAgentByName(this.env.SUPPLIER_AGENTS, `${this.ctx.id}:${id}`);
+      const result = modelData(await child.verify(id, offer));
+      this.agents.complete(identity, result, lineage);
+      outputs.push({ agent: handle, result });
+    }
+    return outputs;
+  }
   private async execute(principal: Principal, workspaceId: string, source: string, id: string) {
     try {
-      return await this.workspace.execute(principal, workspaceId, source, { id });
+      const result = await this.workspace.execute(principal, workspaceId, source, { id });
+      const owned = this.records.get<{ rootId: string }>("synthetic_agent_roots", id);
+      if (owned && this.budgets.read(owned.rootId).status !== "completed") {
+        this.agents.complete(
+          this.agents.principal(principal, owned.rootId),
+          { completed: true },
+          result.workspace.lineage,
+        );
+        this.budgets.complete(owned.rootId);
+      }
+      return result;
     } catch (error) {
       const fault = asFault(error);
       if (["APPROVAL_REQUIRED", "RECONNECTION_REQUIRED", "EFFECT_UNCERTAIN"].includes(fault.code))
@@ -1025,6 +1082,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
   }
   async modelCell(rootId: string, source: string, cellId: string) {
     const request = this.modelRequest(rootId);
+    this.records.put("model_cell_roots", cellId, rootId);
     const result = await this.execute(
       principalFor(request.principalId as Persona),
       request.workspaceId,

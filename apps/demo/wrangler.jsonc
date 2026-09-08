@@ -13,9 +13,13 @@
     "bindings": [
       { "name": "APPLICATIONS", "class_name": "DemoApplication" },
       { "name": "MODEL_AGENTS", "class_name": "HarnessThink" },
+      { "name": "SUPPLIER_AGENTS", "class_name": "SupplierAgent" },
     ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DemoApplication", "HarnessThink"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["DemoApplication", "HarnessThink"] },
+    { "tag": "v2", "new_sqlite_classes": ["SupplierAgent"] },
+  ],
   "worker_loaders": [{ "binding": "LOADER" }],
   "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "durable-harness-artifacts" }],
   "ai": { "binding": "AI" },

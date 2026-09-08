@@ -141,7 +141,10 @@ export function preferencesTarget(): LearningTarget {
   };
 }
 
-export function domainTools(store: RecordStore): ToolDefinition[] {
+export function domainTools(
+  store: RecordStore,
+  verifySuppliers?: ToolDefinition["execute"],
+): ToolDefinition[] {
   const learning = new Learning(store, [preferencesTarget()]);
   return workspaces.flatMap((workspace) => {
     const common = {
@@ -150,6 +153,43 @@ export function domainTools(store: RecordStore): ToolDefinition[] {
       inputSchema: { type: "object", additionalProperties: false },
     };
     return [
+      ...(workspace.kind === "quoting" && verifySuppliers
+        ? [
+            {
+              ...common,
+              name: `${workspace.id}.verify-suppliers`,
+              description:
+                "Delegate synthetic quote arithmetic checks to supplier agents. Results and identities are retained.",
+              effect: "idempotent" as const,
+              publicActivity: "Supplier agents are checking the quoted amounts",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  offers: {
+                    type: "array",
+                    minItems: 1,
+                    maxItems: 10,
+                    items: {
+                      type: "object",
+                      properties: {
+                        supplier: { type: "string", maxLength: 120 },
+                        unitPrice: { type: "number", minimum: 0 },
+                        freight: { type: "number", minimum: 0 },
+                        quantity: { type: "integer", minimum: 1 },
+                        leadDays: { type: "number", minimum: 0 },
+                      },
+                      required: ["supplier", "unitPrice", "freight", "quantity", "leadDays"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["offers"],
+                additionalProperties: false,
+              },
+              execute: verifySuppliers,
+            },
+          ]
+        : []),
       {
         ...common,
         name: `${workspace.id}.read`,
@@ -237,6 +277,7 @@ await runtime.progress("The supplier is ready to dispatch. The next follow-up is
 const evidence = await tools.call("${workspaceId}.read", {});
 const preferences = await tools.call("${workspaceId}.preferences", {});
 function rankOffers(items: {unitPrice:number,freight:number,quantity:number}[], includeFreight: boolean) { return [...items].sort((a,b) => (a.unitPrice*a.quantity+(includeFreight?a.freight:0))-(b.unitPrice*b.quantity+(includeFreight?b.freight:0))); }
+const supplierChecks = await tools.call("${workspaceId}.verify-suppliers", {offers: evidence.offers});
 const comparison = {rfq: evidence.rfq, offers: rankOffers(evidence.offers, preferences.includeFreight), includesFreight: preferences.includeFreight};
 const recommendation = comparison.offers[0];
 await runtime.progress(recommendation.supplier + " is the lowest-cost option " + (preferences.includeFreight ? "including freight." : "before freight."));

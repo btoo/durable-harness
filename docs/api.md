@@ -137,6 +137,25 @@ comparative benchmarks, and live HTTP observation verification remain under impl
 Each browser experiment uses one Durable Object containing
 its synthetic tenant spaces; scaling to thousands of tenants has not been demonstrated.
 
+## Delegated work
+
+`AgentRegistry` persists agent identities, parent relationships, narrowed authority,
+mailboxes, and immutable results. A root identity uses its root-budget ID. Children share
+that budget and cannot request a permission their parent currently lacks.
+
+The authenticated parent obtains an execution principal with `principal(parent, agentId)`.
+Treat this as a host operation; a model-supplied agent ID never authenticates a caller.
+Every permission check follows the current delegation chain and current space grants.
+Revoking a parent invalidates already-constructed child principals.
+
+Send bounded inputs with stable message IDs and source lineage. A recipient must be able
+to read every source. Use `inbox` and `complete` for recovery; retrying a completed result
+with different data is rejected. Large inputs and results use authorized artifact handles.
+
+The quoting exercise delegates arithmetic checks to separate Cloudflare supplier agents.
+These are explicitly deterministic agents. Their identities, messages, results, and shared
+root budget are real runtime records, visible in the developer workspace inspector.
+
 ## MCP connections
 
 `Connections` owns connection identities, capability grants, schema fingerprints, and

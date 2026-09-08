@@ -5,6 +5,19 @@ export interface Principal {
   id: string;
   deploymentId: string;
   roles: ("customer" | "developer")[];
+  delegationId?: string;
+}
+export interface AuthorityScope {
+  spaceId: string;
+  permissions: Permission[];
+}
+export interface AuthorityDelegation {
+  id: string;
+  subjectId: string;
+  deploymentId: string;
+  parent: Principal;
+  scopes: AuthorityScope[];
+  revoked: boolean;
 }
 export type Permission = "read" | "write" | "publish" | "execute";
 export interface Grant {

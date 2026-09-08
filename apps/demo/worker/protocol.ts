@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { DemoApplication } from "./application.js";
+import type { SupplierAgent } from "./supplier.js";
 import type { HarnessThink } from "./think.js";
 
 export interface DemoEnv {
   APPLICATIONS: DurableObjectNamespace;
   MODEL_AGENTS: DurableObjectNamespace<HarnessThink>;
+  SUPPLIER_AGENTS: DurableObjectNamespace<SupplierAgent>;
   LOADER: WorkerLoader;
   ARTIFACTS: R2Bucket;
   ASSETS: Fetcher;

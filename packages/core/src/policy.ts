@@ -1,11 +1,44 @@
 import { HarnessFault, invariant } from "./errors.js";
-import type { KnowledgeSpace, Permission, Principal, RecordStore, SourceRef } from "./types.js";
+import type {
+  AuthorityDelegation,
+  KnowledgeSpace,
+  Permission,
+  Principal,
+  RecordStore,
+  SourceRef,
+} from "./types.js";
 
 /** Every lookup reads current grants. Persisted snapshots never freeze permissions. */
 export class AccessPolicy {
   constructor(private readonly store: RecordStore) {}
 
   permits(principal: Principal, spaceId: string, permission: Permission): boolean {
+    return this.permitsWithin(principal, spaceId, permission, new Set());
+  }
+  private permitsWithin(
+    principal: Principal,
+    spaceId: string,
+    permission: Permission,
+    visited: Set<string>,
+  ): boolean {
+    if (principal.delegationId) {
+      if (visited.has(principal.delegationId) || visited.size >= 32) return false;
+      visited.add(principal.delegationId);
+      const grant = this.store.get<AuthorityDelegation>(
+        "authority_delegations",
+        principal.delegationId,
+      );
+      return (
+        !!grant &&
+        !grant.revoked &&
+        grant.subjectId === principal.id &&
+        grant.deploymentId === principal.deploymentId &&
+        grant.scopes.some(
+          (scope) => scope.spaceId === spaceId && scope.permissions.includes(permission),
+        ) &&
+        this.permitsWithin(grant.parent, spaceId, permission, visited)
+      );
+    }
     const space = this.store.get<KnowledgeSpace>("spaces", spaceId);
     return (
       !!space &&

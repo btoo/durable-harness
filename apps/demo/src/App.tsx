@@ -734,6 +734,33 @@ function Workspace({
   const [source, setSource] = useState('const toolsAvailable = await tools.search("");');
   return (
     <>
+      {data.agents.length ? (
+        <section className="panel">
+          <div className="panel-heading">
+            <h2>Agent relationships</h2>
+            <span className="secondary-label">Durable identities and results</span>
+          </div>
+          {data.agents.map((agent) => (
+            <details className="cell-record" key={agent.id}>
+              <summary>
+                <GitBranch size={15} />
+                <strong>{agent.name}</strong>
+                <span>
+                  {agent.parentId
+                    ? agent.status
+                    : (data.runs?.find((run) => run.id === agent.rootId)?.status ?? agent.status)}
+                </span>
+              </summary>
+              <p className="caption">
+                {agent.parentId
+                  ? `Delegated by ${data.agents.find((parent) => parent.id === agent.parentId)?.name ?? agent.parentId}`
+                  : "Root coordinator"}
+              </p>
+              <pre>{JSON.stringify({ scopes: agent.scopes, result: agent.result }, null, 2)}</pre>
+            </details>
+          ))}
+        </section>
+      ) : null}
       <section className="panel">
         <div className="panel-heading">
           <h2>Durable namespace</h2>

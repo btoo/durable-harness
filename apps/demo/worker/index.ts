@@ -150,3 +150,5 @@ export default {
     }
   },
 } satisfies ExportedHandler<DemoEnv>;
+
+export { SupplierAgent } from "./supplier.js";

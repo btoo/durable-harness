@@ -332,7 +332,15 @@ export class DurableWorkspace {
           lineage: [...lineage],
         });
         try {
-          const output = await tool.execute(input, { principal, operationId, workspaceId });
+          const output = await tool.execute(input, {
+            principal,
+            operationId,
+            workspaceId,
+            recordSources: (sources) => {
+              this.access.requireSources(principal, sources);
+              lineage.push(...sources);
+            },
+          });
           if (tool.outputSchema) {
             const validation = new Validator(tool.outputSchema).validate(output);
             invariant(

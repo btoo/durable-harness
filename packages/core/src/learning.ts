@@ -42,6 +42,7 @@ export interface ChangeProposal {
   promotedRevision?: number;
 }
 export interface ConfigurationVersion {
+  lineage: SourceRef[];
   target: string;
   workspaceId: string;
   revision: number;
@@ -117,13 +118,21 @@ export class Learning {
     target: string,
   ): ConfigurationVersion | undefined {
     this.access.require(principal, workspaceId, "read");
-    return this.store.get<ConfigurationVersion>("configuration", `${workspaceId}:${target}`);
+    const version = this.store.get<ConfigurationVersion>(
+      "configuration",
+      `${workspaceId}:${target}`,
+    );
+    if (!version) return undefined;
+    const lineage = this.configurationSources(version);
+    this.access.requireSources(principal, lineage);
+    return { ...version, lineage };
   }
   initialize(
     principal: Principal,
     workspaceId: string,
     target: string,
     value: unknown,
+    lineage: SourceRef[] = [],
   ): ConfigurationVersion {
     invariant(
       principal.roles.includes("developer"),
@@ -131,6 +140,7 @@ export class Learning {
       "A developer initializes configuration.",
     );
     this.access.require(principal, workspaceId, "write");
+    this.access.requireSources(principal, lineage);
     this.target(target).validate(value, value);
     const existing = this.configuration(principal, workspaceId, target);
     if (existing) return existing;
@@ -140,6 +150,7 @@ export class Learning {
       revision: 1,
       value,
       proposalId: null,
+      lineage: [...lineage],
       createdAt: new Date().toISOString(),
     };
     this.store.transaction(() => {
@@ -234,7 +245,11 @@ export class Learning {
     target.validate(input.candidate, configuration.value);
     const proposal: ChangeProposal = {
       ...input,
-      lineage: [...input.lineage, ...evidence.flatMap((signal) => signal!.lineage)],
+      lineage: [
+        ...configuration.lineage,
+        ...input.lineage,
+        ...evidence.flatMap((signal) => signal!.lineage),
+      ],
       id: crypto.randomUUID(),
       status: "proposed",
       createdAt: new Date().toISOString(),
@@ -367,6 +382,8 @@ export class Learning {
       "The exact candidate must improve validation results without regressions before promotion.",
     );
     return this.store.transaction(() => {
+      this.access.require(principal, proposal.workspaceId, "write");
+      this.access.requireSources(principal, proposal.lineage);
       const current = this.configuration(principal, proposal.workspaceId, proposal.target)!;
       invariant(
         current.revision === proposal.baseRevision,
@@ -380,6 +397,7 @@ export class Learning {
         revision: current.revision + 1,
         value: proposal.candidate,
         proposalId: proposal.id,
+        lineage: [...proposal.lineage],
         createdAt: new Date().toISOString(),
       };
       this.store.put("configuration", `${version.workspaceId}:${version.target}`, version);
@@ -415,8 +433,11 @@ export class Learning {
         `${workspaceId}:${targetName}:${revision}`,
       );
       invariant(previous, "NOT_FOUND", "The selected configuration revision does not exist.");
+      const lineage = this.configurationSources(previous);
+      this.access.requireSources(principal, lineage);
       const restored = {
         ...previous,
+        lineage,
         revision: current.revision + 1,
         createdAt: new Date().toISOString(),
       };
@@ -433,6 +454,17 @@ export class Learning {
         });
       return restored;
     });
+  }
+  private configurationSources(version: ConfigurationVersion): SourceRef[] {
+    if (version.lineage) return version.lineage;
+    if (!version.proposalId) return [];
+    const proposal = this.store.get<ChangeProposal>("proposals", version.proposalId);
+    invariant(
+      proposal,
+      "NOT_FOUND",
+      "This configuration's provenance is unavailable; restore its proposal before using it.",
+    );
+    return proposal.lineage;
   }
   private target(name: string): LearningTarget {
     const target = this.targets.get(name);

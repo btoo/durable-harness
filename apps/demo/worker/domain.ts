@@ -1,5 +1,6 @@
 import {
   invariant,
+  Learning,
   type LearningTarget,
   type Principal,
   type RecordStore,
@@ -141,6 +142,7 @@ export function preferencesTarget(): LearningTarget {
 }
 
 export function domainTools(store: RecordStore): ToolDefinition[] {
+  const learning = new Learning(store, [preferencesTarget()]);
   return workspaces.flatMap((workspace) => {
     const common = {
       version: "1",
@@ -174,11 +176,15 @@ export function domainTools(store: RecordStore): ToolDefinition[] {
         description: "Read the current evaluated customer preferences.",
         effect: "read" as const,
         publicActivity: "Applying your saved preferences",
-        execute: async () =>
-          store.get<{ value: ProcurementPreferences }>(
-            "configuration",
-            `${workspace.id}:procurement-preferences`,
-          )?.value ?? initialPreferences,
+        execute: async (_input, context) => {
+          const version = learning.configuration(
+            context.principal,
+            workspace.id,
+            "procurement-preferences",
+          );
+          context.recordSources(version?.lineage ?? []);
+          return version?.value ?? initialPreferences;
+        },
       },
       {
         ...common,

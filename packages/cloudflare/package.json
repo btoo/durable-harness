@@ -6,10 +6,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@durable-harness/core": "0.1.0",
     "@cloudflare/codemode": "0.5.1",
-    "@cloudflare/think": "0.17.0",
     "@cloudflare/shell": "0.4.3",
-    "agents": "0.22.0"
+    "@cloudflare/think": "0.17.0",
+    "@durable-harness/core": "0.1.0",
+    "agents": "0.22.0",
+    "workers-ai-provider": "4.0.0"
   }
 }

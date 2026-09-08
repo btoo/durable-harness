@@ -8,7 +8,7 @@ import {
 import { tool } from "ai";
 import { z } from "zod";
 import { invariant } from "@durable-harness/core";
-import { modelData } from "@durable-harness/cloudflare";
+import { canonicalWorkersAI, modelData } from "@durable-harness/cloudflare";
 import { application, type DemoEnv, type ModelRequest } from "./protocol.js";
 
 /** Think owns turn admission; durable-harness owns authorized cells and their journal. */
@@ -16,6 +16,12 @@ export class HarnessThink extends Think<DemoEnv> {
   includeMcpTools = false;
   maxSteps = 8;
   sendReasoning = false;
+  private mirroredFields = 0;
+  getAIBinding(): Ai {
+    return canonicalWorkersAI(this.env.AI, (count) => {
+      this.mirroredFields += count;
+    });
+  }
   getModel(): ThinkModel {
     return "@cf/meta/llama-3.3-70b-instruct-fp8-fast" as const;
   }
@@ -69,6 +75,7 @@ export class HarnessThink extends Think<DemoEnv> {
     };
   }
   async beforeStep(context: PrepareStepContext) {
+    this.mirroredFields = 0;
     const request = this.request();
     const stepId = `${request.rootId}:${context.stepNumber}`;
     // Conservative admission estimate includes tool schemas, instructions and output headroom.
@@ -84,6 +91,7 @@ export class HarnessThink extends Think<DemoEnv> {
       await this.application().modelSettle(request.rootId, stepId, context.usage.totalTokens);
     if (stepId)
       await this.application().modelStep(request.rootId, stepId, {
+        mirroredFields: this.mirroredFields,
         finishReason: context.finishReason,
         calls: context.toolCalls.map((call) => ({ name: call.toolName, input: call.input })),
         results: context.toolResults.map((result) => ({

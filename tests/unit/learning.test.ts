@@ -85,6 +85,17 @@ function setup(kind: LearningTarget["kind"] = "instruction") {
 }
 
 describe("measured configuration promotion", () => {
+  it("preserves source restrictions when a derived candidate becomes active configuration", async () => {
+    const { learning, proposal } = setup();
+    const derived = learning.propose(dev, {
+      ...proposal,
+      lineage: [{ spaceId: "b", itemId: "private-evidence" }],
+    });
+    await learning.evaluate(dev, derived.id);
+    await learning.promote(dev, derived.id);
+    expect(() => learning.configuration(buyerA, "a", proposal.target)).toThrow("read");
+    expect(learning.configuration(dev, "a", proposal.target)?.value).toBe("unit");
+  });
   it("evaluates the exact candidate, excludes heldout cases, and promotes an improvement", async () => {
     const { learning, proposal } = setup();
     await expect(learning.promote(buyerA, proposal.id)).rejects.toThrow(/exact candidate/);

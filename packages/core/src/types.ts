@@ -76,6 +76,7 @@ export interface ToolContext {
   principal: Principal;
   operationId: string;
   workspaceId: string;
+  recordSources(sources: SourceRef[]): void;
 }
 export interface OperationRecord {
   id: string;

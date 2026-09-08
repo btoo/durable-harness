@@ -6,7 +6,7 @@
 - Initial scaffold pushed and read back at `425c35dfacfcfb34c2e0d51194cdf8b8208fa300`.
 - Core code under development: graph codec, lexical cell compiler, versioned helper modules,
   SQLite record store, permissions, history, operation journal, and event log.
-- Eighteen unit tests pass over graph values, real SQLite, publication policy, scoped FTS,
+- Twenty-one unit tests pass over graph values, real SQLite, publication policy, scoped FTS,
   compaction, evaluated learning, encrypted credentials, rotation/revocation, artifacts, and budgets.
 - Sixteen real Workers runtime tests pass: eviction recovery, approval/resume, helper version pins,
   input validation, unsupported captures, revoked grants, stream/history parity, uncertain
@@ -30,6 +30,12 @@
 - First real-model attempt: eight steps, 15,810 reported tokens, 27.2 seconds active execution.
   It produced no new cells and **did not prove** the generation contract. A subsequent local
   controlled-provider test exposed and fixed RPC metadata contaminating model tool output.
+- Second attempt: eight steps, 17,081 reported tokens, 29.0 seconds active execution.
+  Its tool arguments contained doubled tokens and never reached the runtime. An actual-provider
+  unit test reproduced the failure with mirrored native/OpenAI SSE fields. The compatibility
+  adapter removes only exact mirrors within one event and preserves repeated text across events.
+- Promoted configuration now retains proposal and baseline lineage; a cross-scope regression
+  test verifies that promotion cannot disclose restricted evidence to another customer.
 - Further real-model and recovery verification is in progress. There is no comparative
   effectiveness result yet.
 

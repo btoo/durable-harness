@@ -199,6 +199,7 @@ export class DemoApplication extends DurableObject<DemoEnv> {
               results: unknown[];
               errors: unknown[];
               finishReason: string;
+              mirroredFields?: number;
             }>("model_steps"),
           }
         : {}),
@@ -518,7 +519,13 @@ export class DemoApplication extends DurableObject<DemoEnv> {
   modelStep(
     rootId: string,
     stepId: string,
-    evidence: { calls: unknown[]; results: unknown[]; errors: unknown[]; finishReason: string },
+    evidence: {
+      calls: unknown[];
+      results: unknown[];
+      errors: unknown[];
+      finishReason: string;
+      mirroredFields?: number;
+    },
   ): void {
     this.modelRequest(rootId);
     this.records.put("model_steps", stepId, { rootId, stepId, ...evidence });

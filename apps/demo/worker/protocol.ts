@@ -40,6 +40,7 @@ export const personaSchema = z.enum(["northstar", "cedar", "developer"]);
 export type Persona = z.infer<typeof personaSchema>;
 export const commandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("run-synthetic") }),
+  z.object({ action: z.literal("probe-model") }),
   z.object({ action: z.literal("prepare-message") }),
   z.object({
     action: z.literal("cell"),

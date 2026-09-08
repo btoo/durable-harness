@@ -397,6 +397,41 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       "ACCESS_DENIED",
       "Real-model experiments require the deployment's administrator token and a finite run budget.",
     );
+    if (command.action === "probe-model") {
+      const id = crypto.randomUUID();
+      this.budgets.start(id, { steps: 1, tokens: 4096, activeMs: 30_000, descendants: 1 });
+      this.budgets.reserve(id, "probe", 4096);
+      const response = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+        messages: [{ role: "user", content: "Call the capture tool with the text alpha beta." }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "capture",
+              description: "Capture a test string",
+              parameters: {
+                type: "object",
+                properties: { text: { type: "string" } },
+                required: ["text"],
+              },
+            },
+          },
+        ],
+        stream: true,
+        max_tokens: 128,
+      });
+      const result =
+        response instanceof ReadableStream
+          ? await new Response(response).text()
+          : JSON.stringify(response);
+      invariant(
+        result.length <= 64_000,
+        "BUDGET_EXCEEDED",
+        "The provider probe exceeded its output bound.",
+      );
+      this.budgets.complete(id);
+      return { rootId: id, model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", wire: result };
+    }
     const rootId = crypto.randomUUID();
     // Customer-facing generation starts with the selected customer's authority.
     const principalId = workspaceId.startsWith("cedar") ? "cedar" : "northstar";

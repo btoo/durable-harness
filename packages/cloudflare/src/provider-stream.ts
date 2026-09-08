@@ -1,5 +1,28 @@
 import { invariant } from "@durable-harness/core";
 
+function mirroredCalls(native: unknown[], compatible: unknown[]): boolean {
+  if (native.length !== compatible.length) return false;
+  type Delta = {
+    index?: number;
+    id?: string | null;
+    name?: unknown;
+    arguments?: unknown;
+    function?: { name?: unknown; arguments?: unknown };
+  };
+  return native.every((value, index) => {
+    const left = value as Delta | null;
+    const right = compatible[index] as Delta | null;
+    if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+    return (
+      (left.index ?? index) === (right.index ?? index) &&
+      (left.id == null || right.id == null || left.id === right.id) &&
+      (left.function?.name ?? left.name ?? null) === (right.function?.name ?? right.name ?? null) &&
+      JSON.stringify(left.function?.arguments ?? left.arguments ?? null) ===
+        JSON.stringify(right.function?.arguments ?? right.arguments ?? null)
+    );
+  });
+}
+
 /** Normalize only exact mirrors within one SSE event, never repeated tokens across events. */
 export function canonicalWorkersAIStream(
   stream: ReadableStream<Uint8Array>,
@@ -35,7 +58,7 @@ export function canonicalWorkersAIStream(
     if (
       Array.isArray(value.tool_calls) &&
       Array.isArray(delta.tool_calls) &&
-      JSON.stringify(value.tool_calls) === JSON.stringify(delta.tool_calls)
+      mirroredCalls(value.tool_calls, delta.tool_calls)
     ) {
       delete value.tool_calls;
       mirrors++;

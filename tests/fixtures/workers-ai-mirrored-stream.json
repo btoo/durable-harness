@@ -1,0 +1,177 @@
+{
+  "source": "Cloudflare Workers AI raw SSE, 2026-09-08; synthetic capture tool with alpha beta. Request identifiers removed.",
+  "frames": [
+    {
+      "response": "",
+      "tool_calls": [],
+      "choices": [
+        {
+          "delta": {
+            "content": "",
+            "role": "assistant"
+          },
+          "finish_reason": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 252,
+        "completion_tokens": 0,
+        "total_tokens": 252
+      }
+    },
+    {
+      "tool_calls": [
+        {
+          "name": "capture"
+        }
+      ],
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "name": "capture"
+                },
+                "id": "captured-call",
+                "index": 0,
+                "type": "function"
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 12,
+        "total_tokens": 12
+      }
+    },
+    {
+      "tool_calls": [
+        {
+          "arguments": "{\"text\": \""
+        }
+      ],
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "{\"text\": \""
+                },
+                "index": 0
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 8,
+        "total_tokens": 8
+      }
+    },
+    {
+      "tool_calls": [
+        {
+          "arguments": "alpha"
+        }
+      ],
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "alpha"
+                },
+                "index": 0
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 1,
+        "total_tokens": 1
+      }
+    },
+    {
+      "tool_calls": [
+        {
+          "arguments": " beta\"}"
+        }
+      ],
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": " beta\"}"
+                },
+                "index": 0
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 1,
+        "total_tokens": 1
+      }
+    },
+    {
+      "tool_calls": [
+        {
+          "arguments": ""
+        }
+      ],
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": ""
+                },
+                "index": 0
+              }
+            ]
+          },
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 1,
+        "total_tokens": 1
+      }
+    },
+    {
+      "tool_calls": [],
+      "choices": [],
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      }
+    },
+    {
+      "response": "",
+      "usage": {
+        "prompt_tokens": 252,
+        "completion_tokens": 23,
+        "total_tokens": 275
+      }
+    }
+  ]
+}

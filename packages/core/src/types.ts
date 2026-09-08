@@ -66,6 +66,7 @@ export interface ToolDefinition {
   spaceId: string;
   publicActivity: string;
   requiresApproval?: boolean;
+  prepare?: (input: unknown, context: ToolContext) => Promise<void>;
   execute: (input: unknown, context: ToolContext) => Promise<unknown>;
   reconcile?: (
     operationId: string,

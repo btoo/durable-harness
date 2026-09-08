@@ -16,11 +16,33 @@ type TestHost = DurableObjectStub &
     | "reconcile"
     | "changeToolVersion"
     | "revokePrivate"
+    | "authorizeConnection"
   >;
 const testEnv = env as unknown as { WORKSPACES: DurableObjectNamespace };
 const host = () => testEnv.WORKSPACES.getByName(crypto.randomUUID()) as TestHost;
 
 describe("code cells in real Dynamic Workers and Durable Object storage", () => {
+  it("resumes preflight authorization without treating a dispatched write as safe to repeat", async () => {
+    const workspace = host();
+    const id = crypto.randomUUID();
+    const source = 'const receipt = await tools.call("connection.send", {});';
+    const paused = await workspace.run(source, id);
+    expect(paused.ok).toBe(false);
+    if (!paused.ok) expect(paused.error.code).toBe("RECONNECTION_REQUIRED");
+    expect((await workspace.counts()).sends).toBe(0);
+    await evictDurableObject(workspace);
+    await workspace.authorizeConnection();
+    expect((await workspace.run(source, id)).ok).toBe(true);
+    expect((await workspace.counts()).sends).toBe(1);
+    const uncertainId = crypto.randomUUID();
+    const uncertainSource = 'const outcome = await tools.call("connection.lost-result", {});';
+    const result = await workspace.run(uncertainSource, uncertainId);
+    if (!result.ok) expect(result.error.code).toBe("EFFECT_UNCERTAIN");
+    else throw new Error("The uncertain write committed.");
+    await evictDurableObject(workspace);
+    await workspace.run(uncertainSource, uncertainId);
+    expect((await workspace.counts()).sends).toBe(2);
+  });
   it("rechecks acquired evidence restrictions before disclosing operation diagnostics", async () => {
     const workspace = host();
     const id = crypto.randomUUID();

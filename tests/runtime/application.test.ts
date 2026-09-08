@@ -72,6 +72,15 @@ describe("authenticated reference application", () => {
   });
   it("executes Think tool calls and persists the streamed response", async () => {
     const cookie = await session("developer");
+    await SELF.fetch("https://demo.test/api/command?workspace=northstar-quoting", {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        authorization: "Bearer test-only-model-admission",
+      },
+      body: JSON.stringify({ action: "seed-history" }),
+    });
     const response = await SELF.fetch("https://demo.test/api/command?workspace=northstar-quoting", {
       method: "POST",
       headers: {

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import {
   Artifacts,
   DurableWorkspace,
+  HarnessFault,
   asFault,
   decodeGraph,
   type KnowledgeSpace,
@@ -13,6 +14,7 @@ import demoWorker from "../../apps/demo/worker/index.js";
 import type { DemoEnv } from "../../apps/demo/worker/protocol.js";
 export { DemoApplication, HarnessThink } from "../../apps/demo/worker/index.js";
 export { TestHarnessThink } from "./model.js";
+export { McpTestHost } from "./mcp-host.js";
 
 export const developer: Principal = { id: "developer", deploymentId: "test", roles: ["developer"] };
 export const customer: Principal = { id: "customer", deploymentId: "test", roles: ["customer"] };
@@ -46,6 +48,36 @@ export class WorkspaceTestHost extends DurableObject<{
         ],
       });
     const tools: ToolDefinition[] = [
+      {
+        name: "connection.send",
+        version: "1",
+        description: "Send after authorization",
+        spaceId: "test",
+        inputSchema: { type: "object" },
+        effect: "external",
+        publicActivity: "Sending through the connected account",
+        prepare: async () => {
+          if (!this.store.get("connection", "ready"))
+            throw new HarnessFault("RECONNECTION_REQUIRED", "Reconnect this account.");
+        },
+        execute: async () => {
+          this.store.put("counts", "sends", (this.store.get<number>("counts", "sends") ?? 0) + 1);
+          return { sent: true };
+        },
+      },
+      {
+        name: "connection.lost-result",
+        version: "1",
+        description: "Lose authorization after an effect",
+        spaceId: "test",
+        inputSchema: { type: "object" },
+        effect: "external",
+        publicActivity: "Sending a synthetic message",
+        execute: async () => {
+          this.store.put("counts", "sends", (this.store.get<number>("counts", "sends") ?? 0) + 1);
+          throw new HarnessFault("RECONNECTION_REQUIRED", "Authorization was lost after dispatch.");
+        },
+      },
       {
         name: "private.lookup",
         version: "1",
@@ -151,6 +183,9 @@ export class WorkspaceTestHost extends DurableObject<{
   }
   revokePrivate() {
     this.workspace.access.setGrants(developer, "operator-private", [], 1);
+  }
+  authorizeConnection() {
+    this.store.put("connection", "ready", true);
   }
 }
 export default {

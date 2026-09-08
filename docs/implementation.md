@@ -50,6 +50,15 @@
   an unselected private title; operation diagnostics recheck acquired source restrictions.
 - A bounded private CDC sample and prompt original were retained outside Git. Live HTTP
   collector verification and quoting observation coverage remain separate pending checks.
+- The Cloudflare MCP client now passes local protocol and OAuth integration tests, including
+  PKCE, encrypted credentials, refresh rotation after eviction, and reconstructed connections.
+  An authentication preflight can pause safely; failure after dispatch retains write uncertainty.
+- The first GLM attempt stopped at its 2,048-token response cap without creating a cell.
+  The response allowance is now 8,192, with default reasoning and the same 48,000-token root
+  budget. This change is not evidence that the model performs better.
+- The first deployed recovery continuation exposed an AI SDK 7 message-role incompatibility
+  after the actual restart succeeded. Portable checkpoints now enter the model as historical
+  user evidence, with source roles retained, instead of unsupported system messages.
 
 ## Current verification
 

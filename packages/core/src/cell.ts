@@ -310,7 +310,7 @@ export class DurableWorkspace {
             tool: name,
             toolVersion: tool.version,
             input: encodedInput,
-            status: tool.requiresApproval ? "pending_approval" : "executing",
+            status: tool.requiresApproval ? "pending_approval" : "approved",
             lineage: uniqueSources(lineage),
           };
           this.store.put("operations", operationId, operation);
@@ -326,6 +326,16 @@ export class DurableWorkspace {
             throw new HarnessFault("APPROVAL_REQUIRED", "This action is waiting for approval.");
           }
         }
+        if (tool.prepare)
+          await tool.prepare(input, {
+            principal,
+            operationId,
+            workspaceId,
+            recordSources: (sources) => {
+              this.access.requireSources(principal, sources);
+              lineage.push(...sources);
+            },
+          });
         operation = { ...operation, status: "executing" };
         this.store.put("operations", operationId, operation);
         this.events.append({
@@ -389,7 +399,7 @@ export class DurableWorkspace {
           // Delivery or diagnostics can fail after the result has settled. Never rewrite it.
           if (this.store.get<OperationRecord>("operations", operationId)?.status === "completed")
             throw fault;
-          if (fault.code === "RECONNECTION_REQUIRED") {
+          if (fault.code === "RECONNECTION_REQUIRED" && tool.effect !== "external") {
             this.store.put("operations", operationId, { ...operation, status: "approved" });
             throw fault;
           }
@@ -686,7 +696,12 @@ export class DurableWorkspace {
           "NOT_FOUND",
           "No accessible tool exists with that name.",
         );
-        const { execute: _execute, reconcile: _reconcile, ...description } = tool;
+        const {
+          execute: _execute,
+          reconcile: _reconcile,
+          prepare: _prepare,
+          ...description
+        } = tool;
         return description;
       });
     const tool = this.tools.get(name);

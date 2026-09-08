@@ -28,6 +28,7 @@ export type ApplicationStub = DurableObjectStub &
     | "restartNow"
     | "subscribe"
     | "modelContext"
+    | "modelBinding"
     | "modelPrepared"
     | "modelReserve"
     | "modelSettle"

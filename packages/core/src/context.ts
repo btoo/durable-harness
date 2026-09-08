@@ -25,7 +25,7 @@ export interface ContextReceipt {
   createdAt: string;
 }
 export interface PreparedContext {
-  messages: { role: "user" | "assistant" | "system"; content: string }[];
+  messages: { role: "user" | "assistant"; content: string }[];
   estimatedTokens: number;
   receipt?: ContextReceipt;
 }
@@ -97,7 +97,7 @@ export class ContextManager {
     if (prior) {
       const selected = history.filter((item) => prior.keptIds.includes(item.id));
       const messages = [
-        { role: "system" as const, content: this.checkpoint(prior) },
+        { role: "user" as const, content: this.checkpoint(prior) },
         ...selected.map((item) => this.message(item)),
       ];
       const estimatedTokens =
@@ -164,7 +164,7 @@ export class ContextManager {
       createdAt: new Date().toISOString(),
     };
     const messages = [
-      { role: "system" as const, content: this.checkpoint(receipt) },
+      { role: "user" as const, content: this.checkpoint(receipt) },
       ...[...pinned, ...kept]
         .sort((a, b) => a.sequence - b.sequence)
         .map((item) => this.message(item)),
@@ -194,7 +194,7 @@ export class ContextManager {
   }
   private message(item: HistoryItem): PreparedContext["messages"][number] {
     return {
-      role: item.role === "tool" ? "user" : item.role,
+      role: item.role === "assistant" ? "assistant" : "user",
       content: `[source:${item.id}; role:${item.role}] ${item.text}`,
     };
   }

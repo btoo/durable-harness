@@ -8,12 +8,18 @@
       { "name": "WORKSPACES", "class_name": "WorkspaceTestHost" },
       { "name": "APPLICATIONS", "class_name": "DemoApplication" },
       { "name": "MODEL_AGENTS", "class_name": "TestHarnessThink" },
+      { "name": "MCP_TESTS", "class_name": "McpTestHost" },
     ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["WorkspaceTestHost", "DemoApplication", "TestHarnessThink"],
+      "new_sqlite_classes": [
+        "WorkspaceTestHost",
+        "DemoApplication",
+        "TestHarnessThink",
+        "McpTestHost",
+      ],
     },
   ],
   "worker_loaders": [{ "binding": "LOADER" }],

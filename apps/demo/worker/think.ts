@@ -16,6 +16,8 @@ export class HarnessThink extends Think<DemoEnv> {
   includeMcpTools = false;
   maxSteps = 8;
   sendReasoning = false;
+  private readonly responseTokenLimit = 8192;
+  private inputOverhead = 0;
   private mirroredFields = 0;
   getAIBinding(): Ai {
     return canonicalWorkersAI(this.env.AI, (count) => {
@@ -52,7 +54,9 @@ export class HarnessThink extends Think<DemoEnv> {
           path: z.array(z.union([z.string(), z.number()])).optional(),
         }),
         execute: async ({ binding, path }) =>
-          modelData(await this.application().modelContext(this.request().rootId, binding, path)),
+          binding
+            ? modelData(await this.application().modelBinding(this.request().rootId, binding, path))
+            : modelData(await this.application().modelContext(this.request().rootId)),
       }),
       executeCell: tool({
         description:
@@ -67,13 +71,25 @@ export class HarnessThink extends Think<DemoEnv> {
     const request = this.request();
     const context = await this.application().modelContext(request.rootId);
     const instructions = `You are a procurement assistant working in a synthetic demonstration. Work only in workspace ${request.workspaceId}. All supplier and ERP operations are synthetic. Use inspectWorkspace and executeCell to create useful working structures and explicit helper functions. Inspect the namespace before reusing or changing bindings. Never claim a message was sent without a delivery receipt. When approval is required, report that it is waiting. Your text is customer-facing; use clear, specific language and do not include hidden diagnostics. Preserve the customer's business rules. The current evaluated preferences are ${JSON.stringify(context.preferences?.value)}. Retained bindings and helper handles: ${JSON.stringify(context.workspace)}. Tool names are discoverable with tools.search("").`;
-    const prepared = await this.application().modelPrepared(request.rootId, instructions);
+    const schemas = Object.entries(this.getTools()).map(([name, definition]) => ({
+      name,
+      description: definition.description,
+      inputSchema: z.toJSONSchema(definition.inputSchema as z.ZodType),
+    }));
+    this.inputOverhead =
+      new TextEncoder().encode(instructions + JSON.stringify(schemas)).byteLength + 512;
+    const prepared = await this.application().modelPrepared(
+      request.rootId,
+      instructions,
+      schemas,
+      this.responseTokenLimit,
+    );
     return {
       instructions,
       messages: prepared.messages,
       activeTools: ["inspectWorkspace", "executeCell"],
       maxSteps: 8,
-      maxOutputTokens: 2048,
+      maxOutputTokens: this.responseTokenLimit,
       maxRetries: 0,
       timeout: 120_000,
       sendReasoning: false,
@@ -83,8 +99,11 @@ export class HarnessThink extends Think<DemoEnv> {
     this.mirroredFields = 0;
     const request = this.request();
     const stepId = `${request.rootId}:${context.stepNumber}`;
-    // Conservative admission estimate includes tool schemas, instructions and output headroom.
-    const estimate = Math.ceil(JSON.stringify(context.messages).length / 3) + 4096;
+    // Reserve conservatively from the complete UTF-8 input plus the full output allowance.
+    const estimate =
+      new TextEncoder().encode(JSON.stringify(context.messages)).byteLength +
+      this.inputOverhead +
+      this.responseTokenLimit;
     await this.application().modelReserve(request.rootId, stepId, estimate);
     await this.ctx.storage.put(`budget-step:${request.rootId}`, stepId);
     return { activeTools: ["inspectWorkspace", "executeCell"] };

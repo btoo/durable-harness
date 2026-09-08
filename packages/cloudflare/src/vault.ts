@@ -52,10 +52,63 @@ export class EncryptedSecrets {
       iv: [...iv],
       ciphertext: [...new Uint8Array(ciphertext)],
     } satisfies Envelope);
+    this.store.put("protected_credential_keys", id, { id });
   }
   async delete(id: string): Promise<void> {
     this.store.delete("protected_credentials", id);
+    this.store.delete("protected_credential_keys", id);
   }
+  keys(prefix = ""): string[] {
+    return this.store
+      .list<{ id: string }>("protected_credential_keys")
+      .map((value) => value.id)
+      .filter((id) => id.startsWith(prefix))
+      .sort();
+  }
+}
+
+/** The Cloudflare OAuth provider uses this encrypted subset of DurableObjectStorage. */
+export function encryptedOAuthStorage(secrets: EncryptedSecrets): DurableObjectStorage {
+  const storage = {
+    async get(key: string | string[]) {
+      if (Array.isArray(key)) {
+        const entries = await Promise.all(
+          key.map(async (id) => [id, await secrets.get(id)] as const),
+        );
+        return new Map(entries.filter(([, value]) => value !== undefined));
+      }
+      return secrets.get(key);
+    },
+    async put(key: string | Record<string, unknown>, value?: unknown) {
+      if (typeof key === "string") await secrets.put(key, value);
+      else for (const [id, entry] of Object.entries(key)) await secrets.put(id, entry);
+    },
+    async delete(key: string | string[]) {
+      const keys = Array.isArray(key) ? key : [key];
+      let deleted = 0;
+      for (const id of keys) {
+        if ((await secrets.get(id)) !== undefined) deleted++;
+        await secrets.delete(id);
+      }
+      return Array.isArray(key) ? deleted : deleted > 0;
+    },
+    async list(options: DurableObjectListOptions = {}) {
+      let keys = secrets
+        .keys(options.prefix)
+        .filter(
+          (id) =>
+            (!options.start || id >= options.start) &&
+            (!options.startAfter || id > options.startAfter) &&
+            (!options.end || id < options.end),
+        );
+      if (options.reverse) keys.reverse();
+      if (options.limit) keys = keys.slice(0, options.limit);
+      return new Map(
+        await Promise.all(keys.map(async (id) => [id, await secrets.get(id)] as const)),
+      );
+    },
+  };
+  return storage as unknown as DurableObjectStorage;
 }
 
 export class EncryptedCredentialVault implements CredentialVault {

@@ -13,5 +13,11 @@
     "types": ["node", "@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"],
     "noEmit": true
   },
-  "include": ["packages/**/*.ts", "apps/**/*.ts", "apps/**/*.tsx", "tests/**/*.ts"]
+  "include": [
+    "packages/**/*.ts",
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "tests/**/*.ts",
+    "scripts/**/*.ts"
+  ]
 }

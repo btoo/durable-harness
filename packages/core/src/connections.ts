@@ -1,12 +1,13 @@
 import { contentHash } from "./compiler.js";
 import { HarnessFault, invariant } from "./errors.js";
 import { AccessPolicy } from "./policy.js";
-import type { Principal, RecordStore } from "./types.js";
+import type { Principal, RecordStore, ToolDefinition } from "./types.js";
 
 export interface McpTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
 }
 export interface McpCredentials {
   accessToken: string;
@@ -35,6 +36,7 @@ export interface McpConnection {
     | "revoked"
     | "schema_changed";
   backgroundAccess: "supported" | "until_expiry" | "unknown";
+  scopes?: string[];
   allowedTools: string[];
   tools: McpTool[];
   fingerprint: string;
@@ -43,10 +45,18 @@ export interface McpConnection {
   lastError?: string;
 }
 export interface McpTransport {
+  managesAuthorization?: boolean;
+  disconnect?(connection: McpConnection): Promise<void>;
+  prepare?(connection: McpConnection): Promise<void>;
   connect(
     connection: McpConnection,
     credentials?: McpCredentials,
-  ): Promise<{ tools?: McpTool[]; authorizationUrl?: string }>;
+  ): Promise<{
+    tools?: McpTool[];
+    authorizationUrl?: string;
+    backgroundAccess?: McpConnection["backgroundAccess"];
+    scopes?: string[];
+  }>;
   call(
     connection: McpConnection,
     tool: string,
@@ -157,19 +167,16 @@ export class Connections {
           authorizationUrl: result.authorizationUrl,
         });
       const tools = result.tools ?? [];
-      const fingerprint = await contentHash(
-        JSON.stringify(
-          tools
-            .map((tool) => [tool.name, tool.inputSchema])
-            .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
-        ),
-      );
+      const fingerprint = await fingerprintMcpTools(tools);
       this.checkCurrent(principal, connection, "write");
       const changed = !!connection.fingerprint && connection.fingerprint !== fingerprint;
+      const { authorizationUrl: _authorizationUrl, lastError: _lastError, ...settled } = connection;
       return this.save({
-        ...connection,
+        ...settled,
         tools,
         fingerprint,
+        backgroundAccess: result.backgroundAccess ?? connection.backgroundAccess,
+        scopes: result.scopes ?? connection.scopes ?? [],
         state: changed ? "schema_changed" : "ready",
         revision: connection.revision + Number(changed),
         ...(changed ? { allowedTools: [] } : {}),
@@ -274,14 +281,18 @@ export class Connections {
       "This MCP tool has not been granted to the workspace.",
     );
     let credentials = await this.vault.get(id);
-    if (connection.auth !== "none" && !credentials) {
+    if (!this.transport.managesAuthorization && connection.auth !== "none" && !credentials) {
       this.save({ ...connection, state: "reconnection_required" });
       throw new HarnessFault(
         "RECONNECTION_REQUIRED",
         "The connection has no usable authorization. Reconnect it to resume.",
       );
     }
-    if (credentials?.expiresAt !== undefined && credentials.expiresAt <= Date.now() + 10_000) {
+    if (
+      !this.transport.managesAuthorization &&
+      credentials?.expiresAt !== undefined &&
+      credentials.expiresAt <= Date.now() + 10_000
+    ) {
       if (!credentials.refreshToken || !this.transport.refresh) {
         this.save({
           ...connection,
@@ -369,6 +380,67 @@ export class Connections {
     this.policy.require(principal, connection.spaceId, "write");
     this.save({ ...connection, state: "revoked", allowedTools: [] });
     await this.vault.delete(id);
+    await this.transport.disconnect?.(connection);
+  }
+  capabilities(
+    policy: (
+      connection: McpConnection,
+      tool: McpTool,
+    ) => { effect: ToolDefinition["effect"]; requiresApproval: boolean } = () => ({
+      effect: "external",
+      requiresApproval: true,
+    }),
+  ): ToolDefinition[] {
+    return this.store.list<McpConnection>("connections").flatMap((connection) =>
+      connection.allowedTools.flatMap((name) => {
+        const tool = connection.tools.find((value) => value.name === name);
+        if (!tool || connection.state === "revoked") return [];
+        const rules = policy(connection, tool);
+        return [
+          {
+            name: `mcp.${connection.id}.${name}`,
+            version: connection.fingerprint,
+            spaceId: connection.spaceId,
+            description: tool.description.slice(0, 2000),
+            inputSchema: tool.inputSchema,
+            effect: rules.effect,
+            requiresApproval: rules.requiresApproval,
+            publicActivity: `Using ${connection.name}: ${name}`,
+            prepare: async (_input, context) => {
+              const current = this.read(context.principal, connection.id);
+              this.policy.require(context.principal, current.spaceId, "execute");
+              invariant(
+                current.fingerprint === connection.fingerprint &&
+                  current.allowedTools.includes(name),
+                "STALE_REVISION",
+                "The connection's capabilities changed before dispatch.",
+              );
+              invariant(
+                current.state === "ready",
+                "RECONNECTION_REQUIRED",
+                "Reconnect this account before resuming its tools.",
+              );
+              try {
+                await this.transport.prepare?.(current);
+              } catch (error) {
+                const latest = this.read(context.principal, connection.id);
+                if (latest.state !== "revoked")
+                  this.save({
+                    ...latest,
+                    state:
+                      error instanceof HarnessFault && error.code === "STALE_REVISION"
+                        ? "schema_changed"
+                        : "reconnection_required",
+                  });
+                throw error;
+              }
+            },
+            execute: async (input, context) =>
+              this.call(context.principal, connection.id, name, input, connection.fingerprint),
+          } satisfies ToolDefinition,
+        ];
+      }),
+    );
   }
   private save(connection: McpConnection): McpConnection {
     this.store.put("connections", connection.id, connection);
@@ -388,4 +460,14 @@ export class Connections {
       "Connection settings changed during this request. Read the current connection before continuing.",
     );
   }
+}
+
+export async function fingerprintMcpTools(tools: McpTool[]): Promise<string> {
+  return contentHash(
+    JSON.stringify(
+      tools
+        .map((tool) => [tool.name, tool.inputSchema, tool.outputSchema ?? null])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    ),
+  );
 }

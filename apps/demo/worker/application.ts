@@ -570,18 +570,11 @@ export class DemoApplication extends DurableObject<DemoEnv> {
     );
   }
 
-  async modelContext(rootId: string, binding?: string, path: (string | number)[] = []) {
+  async modelContext(rootId: string) {
     const request = this.modelRequest(rootId);
     const principal = principalFor(request.principalId as Persona);
     return {
       workspace: this.workspace.inspect(principal, request.workspaceId),
-      ...(binding
-        ? { value: this.workspace.readBinding(principal, request.workspaceId, binding, path) }
-        : {}),
-      history: this.workspace.history
-        .list(principal, request.workspaceId)
-        .slice(-8)
-        .map((item) => ({ ...item, text: item.text.slice(0, 2000) })),
       preferences: this.learning.configuration(
         principal,
         request.workspaceId,
@@ -589,7 +582,24 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       ),
     };
   }
-  async modelPrepared(rootId: string, instructions: string) {
+  modelBinding(rootId: string, binding: string, path: (string | number)[] = []) {
+    const request = this.modelRequest(rootId);
+    return {
+      binding,
+      value: this.workspace.readBinding(
+        principalFor(request.principalId as Persona),
+        request.workspaceId,
+        binding,
+        path,
+      ),
+    };
+  }
+  async modelPrepared(
+    rootId: string,
+    instructions: string,
+    toolSchemas: unknown,
+    outputReserve: number,
+  ) {
     const request = this.modelRequest(rootId);
     return new ContextManager(this.records).prepare(
       principalFor(request.principalId as Persona),
@@ -597,12 +607,9 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       this.env.MODEL_ID,
       {
         contextWindow: 24_000,
-        outputReserve: 2048,
+        outputReserve,
         instructions,
-        toolSchemas: {
-          inspectWorkspace: "namespace and conversation inspection",
-          executeCell: "bounded TypeScript source",
-        },
+        toolSchemas,
         fraction: 0.6,
       },
       async ({ text }) =>

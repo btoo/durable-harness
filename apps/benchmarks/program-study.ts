@@ -91,7 +91,12 @@ export class ProgramStudy {
   private readonly budgets: RunBudgets;
   constructor(
     private readonly store: RecordStore,
-    private readonly env: { LOADER: WorkerLoader; AI: Ai; MODEL_ID: string },
+    private readonly env: {
+      LOADER: WorkerLoader;
+      AI: Ai;
+      MODEL_ID: string;
+      CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
+    },
   ) {
     this.executor = new DynamicWorkerExecutor({
       loader: env.LOADER,
@@ -165,6 +170,8 @@ export class ProgramStudy {
     if (input.action === "program-metadata")
       return {
         model: this.env.MODEL_ID,
+        deployment: this.env.CF_VERSION_METADATA ?? null,
+        capabilities: ["code-edits-v1", "bundled-runtime-v1"],
         contract: toolContract(stage),
         corrections: corrections[stage],
         seed: { source: seedTool },

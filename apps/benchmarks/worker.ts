@@ -23,6 +23,7 @@ interface Env {
   AI: Ai;
   MODEL_ID: string;
   ADMIN_TOKEN: string;
+  CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
 }
 const owner = { id: "benchmark", deploymentId: "benchmark", roles: ["developer"] as "developer"[] };
 const scope = "synthetic-evaluation";

@@ -2,9 +2,9 @@ import { parse } from "@babel/parser";
 import traverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { transform } from "sucrase";
-import { decodeGraph, encodeGraph } from "./codec.js";
 import { HarnessFault, invariant } from "./errors.js";
 import type { FunctionModule, WorkspaceSnapshot } from "./types.js";
+import { cellRuntimeSources } from "./runtime-source.js";
 
 const runtimeNames = new Set(["tools", "runtime", "history", "memory", "artifacts", "console"]);
 const reservedNames = new Set([
@@ -334,9 +334,9 @@ export async function compileCell(
       `const __dhValue = (${source.slice(last.expression.start!, last.expression.end!)});`
     : source + "\nconst __dhValue = undefined;";
   const code = `async () => {
-    (${hardenCellGlobals.toString()})();
-    const __dhDecode = ${decodeGraph.toString()};
-    const __dhEncode = ${encodeGraph.toString()};
+    (${cellRuntimeSources.hardenCellGlobals})();
+    const __dhDecode = ${cellRuntimeSources.decodeGraph};
+    const __dhEncode = ${cellRuntimeSources.encodeGraph};
     const __dhRoots = __dhDecode(${JSON.stringify(starting.graph)});
     const __dhLogs = [];
     let __dhOmittedLogs = 0;

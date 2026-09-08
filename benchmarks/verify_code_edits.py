@@ -8,7 +8,7 @@ import time
 import uuid
 from compare_programs import Client, ROOT
 
-base, proof_path = sys.argv[1:]
+base, proof_path, expected_version = sys.argv[1:]
 previous = json.loads(pathlib.Path(proof_path).read_text())
 baseline = next(
     run["candidate"]
@@ -35,6 +35,14 @@ report = {
 path = ROOT / ".wrangler/proofs" / f"code-edits-{int(time.time())}.json"
 path.write_text(json.dumps(report, indent=2))
 try:
+    metadata = client.call("program-metadata", stage=2)
+    report["deployment"] = metadata.get("deployment")
+    assert metadata.get("deployment", {}).get("id") == expected_version, (
+        "The requested Worker version is not serving this run yet"
+    )
+    assert "code-edits-v1" in metadata.get("capabilities", []), (
+        "The deployed Worker does not support code edits"
+    )
     report["before"] = client.call("program-evaluate", stage=2, candidate=baseline)
     result = client.call("program-edit", stage=2, candidate=baseline)
     report["learning"] = result

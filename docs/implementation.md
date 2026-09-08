@@ -105,6 +105,13 @@
 
 ## Current verification
 
+The deployed sequential recovery comparison exposed `__name is not defined` while
+installing every harness cell; the checkpointed filesystem comparator succeeded. Production
+bundling injected naming helpers into functions that the compiler serialized with `toString()`.
+The regression reproduced both that failure and a renamed-helper failure under minification.
+Sandbox runtime text now comes from canonical TypeScript before deployment bundling. CI
+checks generated-source freshness and executes cells from both production bundle variants.
+
 The sequential tool study reproduced a model timeout that surfaced as `INVALID_CELL`.
 Candidate generation now reports host-enforced timeouts as `BUDGET_EXCEEDED` and other
 provider failures as `MODEL_FAILED`, with an execution identity and unchanged-configuration

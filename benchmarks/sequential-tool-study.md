@@ -73,10 +73,14 @@ npx wrangler deploy --config apps/benchmarks/wrangler.jsonc \
 .wrangler/gepa314/bin/python benchmarks/compare_programs.py \
   https://your-benchmark.account.workers.dev --repetitions 3
 .wrangler/gepa314/bin/python benchmarks/verify_program_recovery.py \
-  https://your-benchmark.account.workers.dev .wrangler/proofs/program-comparison-TIMESTAMP.json
+  https://your-benchmark.account.workers.dev .wrangler/proofs/program-comparison-TIMESTAMP.json WORKER_VERSION_ID
 ```
 
 Use Python 3.10–3.14 with `gepa==0.1.4` in an isolated environment. Credentials and raw
 recordings remain ignored. Model-generated code is evaluated in a Dynamic Worker without
 outbound network, host tools, credentials or evaluator answers. Public reports contain only
 synthetic fixtures and measured aggregates.
+
+The recovery and `verify_code_edits.py` commands require the deployed Worker version ID
+as a final argument. They verify it before running, since requests immediately after a
+deployment can still reach the preceding version during propagation.

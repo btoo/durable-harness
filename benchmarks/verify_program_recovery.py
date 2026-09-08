@@ -1,4 +1,4 @@
-"""Reuse a frozen model-generated tool in both real recovery implementations."""
+"""Replay frozen candidates, including unchanged-seed controls, in both implementations."""
 
 import json
 import pathlib
@@ -7,7 +7,7 @@ import time
 import uuid
 from compare_programs import Client, ROOT
 
-base, proof_path = sys.argv[1:]
+base, proof_path, expected_version = sys.argv[1:]
 proof = json.loads(pathlib.Path(proof_path).read_text())
 secrets = dict(
     line.strip().split("=", 1)
@@ -18,17 +18,26 @@ results = []
 for run in proof["runs"]:
     if run["mode"] == "disabled" or run["status"] != "completed":
         continue
-    # Each generated candidate gets both persistence implementations. This keeps
+    # Each frozen candidate gets both persistence implementations. This keeps
     # code quality out of the persistence comparison.
     for mode in ("harness", "filesystem"):
         client = Client(base, secrets["ADMIN_TOKEN"], f"recovery-{uuid.uuid4()}")
         record = {
             "mode": mode,
             "candidateOrigin": run["mode"],
+            "modelGenerated": any("review" in stage for stage in run["stages"]),
             "repetition": run["repetition"],
         }
         results.append(record)
         try:
+            metadata = client.call("program-metadata", stage=2)
+            record["deployment"] = metadata.get("deployment")
+            assert metadata.get("deployment", {}).get("id") == expected_version, (
+                "The requested Worker version is not serving this run yet"
+            )
+            assert "bundled-runtime-v1" in metadata.get("capabilities", []), (
+                "Deploy the bundle-safe cell runtime before this verification"
+            )
             setup = client.call("recovery-setup", mode=mode, candidate=run["candidate"])
             paused = client.call("recovery-run")
             assert paused["counts"]["effects"] == 0, "An unapproved order was applied"

@@ -29,5 +29,9 @@ Exercise interruptions, replay, revocation, concurrent updates, and late feedbac
 Keep deterministic tests separate from real-model evaluations and deployed checks.
 Generated documentation examples must compile and run against the implemented API.
 
+After changing the graph codec or cell-global hardening, run `npm run runtime:generate`.
+The generated source keeps sandbox execution independent of deploy-time function rewriting.
+`npm run check` detects stale generated code and tests name-preserving and minified builds.
+
 Public demos use real application flows and synthetic data. Record the revision,
 show the causal sequence, and verify the exported video and rendered README.

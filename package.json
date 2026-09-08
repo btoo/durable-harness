@@ -21,7 +21,9 @@
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:runtime": "vitest run",
     "test": "npm run test:unit && npm run test:runtime",
-    "check": "npm run typecheck && npm test"
+    "runtime:generate": "node scripts/build-cell-runtime.mjs",
+    "runtime:check": "node scripts/build-cell-runtime.mjs --check",
+    "check": "npm run runtime:check && npm run typecheck && npm test"
   },
   "dependencies": {
     "@cloudflare/codemode": "0.5.1",
@@ -44,6 +46,7 @@
     "@types/node": "25.0.10",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
+    "esbuild": "0.28.1",
     "prettier": "3.9.6",
     "tsx": "4.21.0",
     "typescript": "5.9.3",

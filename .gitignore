@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+*.log
+.DS_Store
+playwright-report/
+test-results/
+artifacts/private/
+*.recordly
+*.mp4
+*.mov
+*.dill

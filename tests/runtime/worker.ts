@@ -36,7 +36,22 @@ export class WorkspaceTestHost extends DurableObject<{
       ],
     };
     if (!this.store.get("spaces", "test")) this.store.put("spaces", "test", space);
+    this.store.put("spaces", "operator-private", {
+      ...space,
+      id: "operator-private",
+      grants: [{ principalId: developer.id, permissions: ["read", "write", "execute", "publish"] }],
+    });
     const tools: ToolDefinition[] = [
+      {
+        name: "private.lookup",
+        version: "1",
+        description: "Read operator-only evidence",
+        spaceId: "operator-private",
+        inputSchema: { type: "object" },
+        effect: "read",
+        publicActivity: "Reading restricted evidence",
+        execute: async () => ({ recipient: "restricted@example.test" }),
+      },
       {
         name: "offers",
         version: this.store.get<string>("versions", "offers") ?? "1",

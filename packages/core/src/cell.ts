@@ -275,6 +275,7 @@ export class DurableWorkspace {
             toolVersion: tool.version,
             input: encodedInput,
             status: tool.requiresApproval ? "pending_approval" : "executing",
+            lineage: uniqueSources(lineage),
           };
           this.store.put("operations", operationId, operation);
           if (tool.requiresApproval) {
@@ -464,7 +465,7 @@ export class DurableWorkspace {
       "NOT_FOUND",
       "No accessible action exists with that reference.",
     );
-    this.access.requireSources(principal, cell.starting.lineage);
+    this.access.requireSources(principal, [...cell.starting.lineage, ...(operation.lineage ?? [])]);
     invariant(
       operation.status === "pending_approval",
       "INVALID_INPUT",

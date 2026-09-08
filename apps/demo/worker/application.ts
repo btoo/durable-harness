@@ -144,7 +144,8 @@ export class DemoApplication extends DurableObject<DemoEnv> {
       .filter(
         (operation) =>
           cells.some((cell) => cell.id === operation.cellId) &&
-          operation.status === "pending_approval",
+          operation.status === "pending_approval" &&
+          this.workspace.access.visible(principal, selected, operation.lineage ?? []),
       )
       .map((operation) => ({
         id: operation.id,

@@ -20,6 +20,20 @@ const testEnv = env as unknown as { WORKSPACES: DurableObjectNamespace };
 const host = () => testEnv.WORKSPACES.getByName(crypto.randomUUID()) as TestHost;
 
 describe("code cells in real Dynamic Workers and Durable Object storage", () => {
+  it("requires the reviewer to access evidence acquired during the pending cell", async () => {
+    const workspace = host();
+    const id = crypto.randomUUID();
+    await workspace.run(
+      'const privateEvidence = await tools.call("private.lookup", {}); const action = await tools.call("send", {to: privateEvidence.recipient});',
+      id,
+    );
+    await expect(
+      (async () => {
+        await workspace.approve(`${id}:2`);
+      })(),
+    ).rejects.toThrow("read");
+    expect((await workspace.counts()).sends).toBe(0);
+  });
   it("keeps uncertain writes unresolved until the provider reconciles them", async () => {
     const workspace = host();
     const id = crypto.randomUUID();

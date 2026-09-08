@@ -143,6 +143,13 @@ export class ProgramStudy {
   }) {
     const stage = z.union([z.literal(1), z.literal(2)]).parse(input.stage ?? 1);
     const sealed = this.store.get<unknown>("program-study", "sealed");
+    if (input.action === "program-status")
+      return {
+        run: this.store.get("learning_runs", `harness-program-${stage}`),
+        harnessUsage: this.store.get("root_runs", `harness-program-${stage}`),
+        gepaUsage: this.store.get("root_runs", `gepa-program-${stage}`),
+        sealed: !!sealed,
+      };
     if (input.action === "program-metadata")
       return {
         model: this.env.MODEL_ID,

@@ -12,7 +12,8 @@ study, not evidence of production readiness or reduced human engineering effort.
 - Both methods receive the same developer-owned API contract, natural-language corrections,
   adaptation cases and evaluator. No corrected configuration values are provided.
 - The harness uses its resumable capability-proposal pipeline. GEPA 0.1.4 uses its built-in
-  reflective proposer and selection loop, with actual execution diagnostics. A bounded
+  reflective proposer and selection loop, with actual execution diagnostics and its supported
+  `reflection_prompt_template` set to request executable code. A bounded
   callable supplies the configured Workers AI model; it does not replace GEPA's proposer.
 - Each stage allows three candidates, 48,000 tokens and 120 seconds of active execution,
   with 8,192 output tokens per call and the model's default reasoning. Three repetitions
@@ -24,6 +25,12 @@ study, not evidence of production readiness or reduced human engineering effort.
   seals the run against further evaluation or generation and returns no inputs/answers.
 - Families are hand-authored scenarios assigned once to a split. They are not independent
   customer populations; shared semantic rules make statistical generalization claims premature.
+
+The first deployed setup used GEPA's instruction-writing default template. It returned
+prose rather than code and was stopped. Those results are setup failures, not a comparison
+of optimizer quality. The corrected v2 batch uses two repetitions, keeping this iteration
+within the original aggregate admission budget. Attempt limits count failed requests too;
+GEPA's fallback reflection cannot repeatedly call an exhausted root.
 
 Report every run, including exhaustion and provider failures. Measure validation and
 held-out outcomes, prior-case regressions, candidate attempts, reported tokens, active time,

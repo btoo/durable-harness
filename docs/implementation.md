@@ -105,6 +105,13 @@
 
 ## Current verification
 
+The sequential tool study reproduced a model timeout that surfaced as `INVALID_CELL`.
+Candidate generation now reports host-enforced timeouts as `BUDGET_EXCEEDED` and other
+provider failures as `MODEL_FAILED`, with an execution identity and unchanged-configuration
+guidance. Provider error text cannot manufacture authorization or reconnection states.
+Both original failure paths are covered through the actual AI SDK adapter with a controlled
+model; interrupted usage remains reserved by the learning pipeline.
+
 The real-runtime cell suite passed using Cloudflare's local Workers test pool,
 actual SQLite Durable Objects, a WorkerLoader sandbox, and forced object eviction.
 An RPC serialization failure was reproduced and fixed: graph envelopes use plain

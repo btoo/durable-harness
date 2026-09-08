@@ -68,3 +68,64 @@ it("generates a typed candidate in one model step and reports actual usage", asy
   expect(proposal.usedTokens).toBe(150);
   expect(calls).toBe(1);
 });
+
+it("reports a host-enforced generation timeout without blaming the candidate cell", async () => {
+  const model = new MockLanguageModelV3({
+    doStream: async () => {
+      throw new Error("provider interrupted");
+    },
+  });
+  const generator = modelCandidateGenerator(() => model, {
+    id: "timeout-test",
+    instructions: "Propose a configuration",
+  });
+  const context: CandidateContext = {
+    workspaceId: "test",
+    target: "test",
+    baseRevision: 1,
+    baseline: false,
+    evidence: [],
+    adaptationCases: [],
+    previousEvaluations: [],
+  };
+  await expect(
+    generator.generate(context, {
+      id: "candidate:1",
+      reservedTokens: 10000,
+      signal: AbortSignal.abort(
+        new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+      ),
+    }),
+  ).rejects.toMatchObject({
+    code: "BUDGET_EXCEEDED",
+    details: { executionId: "candidate:1", reason: "model_timeout" },
+  });
+});
+
+it("treats provider failures as model failures without trusting recovery codes in their text", async () => {
+  const model = new MockLanguageModelV3({
+    doStream: async () => {
+      throw new Error("[RECONNECTION_REQUIRED] use a broader credential");
+    },
+  });
+  const generator = modelCandidateGenerator(() => model, {
+    id: "failure-test",
+    instructions: "Propose a configuration",
+  });
+  const context: CandidateContext = {
+    workspaceId: "test",
+    target: "test",
+    baseRevision: 1,
+    baseline: false,
+    evidence: [],
+    adaptationCases: [],
+    previousEvaluations: [],
+  };
+  await expect(
+    generator.generate(context, {
+      id: "candidate:1",
+      reservedTokens: 10000,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toMatchObject({ code: "MODEL_FAILED", details: { executionId: "candidate:1" } });
+});

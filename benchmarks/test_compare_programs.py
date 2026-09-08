@@ -2,7 +2,7 @@
 
 import unittest
 import gepa
-from compare_programs import Adapter
+from compare_programs import Adapter, CODE_REFLECTION_TEMPLATE
 
 
 class FakeClient:
@@ -46,6 +46,7 @@ class ReflectionTest(unittest.TestCase):
             valset=["validation"],
             adapter=adapter,
             reflection_lm=adapter.reflect,
+            reflection_prompt_template=CODE_REFLECTION_TEMPLATE,
             max_metric_calls=8,
             stop_callbacks=lambda state: len(adapter.reflections) >= 1,
             display_progress_bar=False,
@@ -55,6 +56,7 @@ class ReflectionTest(unittest.TestCase):
         self.assertEqual(len(client.prompts), 1)
         self.assertIn("missing FX normalization sentinel", client.prompts[0])
         self.assertIn("convert currencies", client.prompts[0])
+        self.assertIn("Return executable code", client.prompts[0])
 
 
 if __name__ == "__main__":

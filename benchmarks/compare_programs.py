@@ -13,6 +13,16 @@ import gepa
 from gepa.core.adapter import EvaluationBatch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+CODE_REFLECTION_TEMPLATE = """Improve this executable JavaScript tool, using the observed execution feedback.
+Current source:
+```javascript
+<curr_param>
+```
+Contract, customer corrections, inputs, outputs and evaluator feedback:
+<side_info>
+Return the complete replacement JavaScript source in one ```javascript block.
+Return executable code, not instructions for another assistant. Preserve unrelated behavior.
+"""
 
 
 class NoRedirects(urllib.request.HTTPRedirectHandler):
@@ -56,6 +66,8 @@ class Adapter:
     def __init__(self, client, stage, metadata):
         self.client, self.stage, self.metadata = client, stage, metadata
         self.reflections = []
+        self.attempts = 0
+        self.stopped = False
 
     def evaluate(self, batch, candidate, capture_traces=False):
         result = self.client.call(
@@ -83,19 +95,32 @@ class Adapter:
         }
 
     def reflect(self, prompt):
-        if len(self.reflections) >= 3:
+        if self.stopped or self.attempts >= 3:
             raise RuntimeError("Three-candidate bound exhausted")
-        result = self.client.call(
-            "program-reflect",
-            stage=self.stage,
-            prompt=prompt,
-            requestId=str(uuid.uuid4()),
-        )
+        self.attempts += 1
+        try:
+            result = self.client.call(
+                "program-reflect",
+                stage=self.stage,
+                prompt=prompt,
+                requestId=str(uuid.uuid4()),
+            )
+        except Exception as error:
+            self.stopped = True
+            status = self.client.call("program-status", stage=self.stage)
+            self.reflections.append(
+                {
+                    "prompt": prompt,
+                    "error": str(error),
+                    "usage": status.get("gepaUsage"),
+                }
+            )
+            raise
         self.reflections.append({"prompt": prompt, **result})
         return result["text"]
 
 
-def run(base, token, mode, repetition, output):
+def run(base, token, mode, repetition, output, checkpoint=lambda: None):
     identity = f"program-{mode}-{uuid.uuid4()}"
     client = Client(base, token, identity)
     report = {
@@ -106,6 +131,7 @@ def run(base, token, mode, repetition, output):
         "status": "running",
     }
     output["runs"].append(report)
+    checkpoint()
     candidate = None
     try:
         for stage in (1, 2):
@@ -115,6 +141,7 @@ def run(base, token, mode, repetition, output):
             before = time.monotonic()
             evidence = {"stage": stage, "baseline": baseline}
             report["stages"].append(evidence)
+            checkpoint()
             if mode == "harness":
                 result = client.call("program-harness", stage=stage)
                 evidence["learning"] = result
@@ -141,9 +168,11 @@ def run(base, token, mode, repetition, output):
                         valset=validation,
                         adapter=adapter,
                         reflection_lm=adapter.reflect,
+                        reflection_prompt_template=CODE_REFLECTION_TEMPLATE,
                         reflection_minibatch_size=len(training),
                         max_metric_calls=128,
-                        stop_callbacks=lambda state: len(adapter.reflections) >= 3
+                        stop_callbacks=lambda state: adapter.stopped
+                        or adapter.attempts >= 3
                         or any(
                             scores and all(score == 1 for score in scores.values())
                             for scores in state.prog_candidate_val_subscores
@@ -164,13 +193,20 @@ def run(base, token, mode, repetition, output):
                         )
                     else:
                         evidence["rejected"] = evaluated
+                except Exception as error:
+                    evidence["error"] = str(error)
                 finally:
                     evidence["reflections"] = adapter.reflections
+                    if adapter.stopped:
+                        evidence["error"] = adapter.reflections[-1].get(
+                            "error", "Reflection stopped"
+                        )
             evidence["seconds"] = time.monotonic() - before
             evidence["candidate"] = candidate
             evidence["validation"] = client.call(
                 "program-evaluate", stage=stage, candidate=candidate
             )
+            checkpoint()
             print(
                 json.dumps(
                     {
@@ -220,7 +256,7 @@ def main():
         if "=" in line
     )
     output = {
-        "study": "sequential-tool-v1",
+        "study": "sequential-tool-v2",
         "sourceRevision": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),
@@ -246,7 +282,14 @@ def main():
         modes = ["disabled", "harness", "gepa"]
         modes = modes[repetition:] + modes[:repetition]
         for mode in modes:
-            report = run(args.base, secrets["ADMIN_TOKEN"], mode, repetition, output)
+            report = run(
+                args.base,
+                secrets["ADMIN_TOKEN"],
+                mode,
+                repetition,
+                output,
+                lambda: path.write_text(json.dumps(output, indent=2)),
+            )
             path.write_text(json.dumps(output, indent=2))
             print(
                 json.dumps(

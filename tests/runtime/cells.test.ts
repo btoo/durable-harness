@@ -3,11 +3,50 @@ import { evictDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { customer, type WorkspaceTestHost } from "./worker.js";
 
-type TestHost = DurableObjectStub & Pick<WorkspaceTestHost, "run" | "inspect" | "actions" | "approve" | "counts" | "events" | "revoke">;
+type TestHost = DurableObjectStub & Pick<WorkspaceTestHost, "run" | "inspect" | "actions" | "approve" | "counts" | "events" | "revoke" | "reconcile" | "changeToolVersion">;
 const testEnv = env as unknown as { WORKSPACES: DurableObjectNamespace };
 const host = () => testEnv.WORKSPACES.getByName(crypto.randomUUID()) as TestHost;
 
 describe("code cells in real Dynamic Workers and Durable Object storage", () => {
+  it("keeps uncertain writes unresolved until the provider reconciles them", async () => {
+    const workspace = host();
+    const id = crypto.randomUUID();
+    const source = 'const receipt = await tools.call("uncertain", {});';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await workspace.run(source, id);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("EFFECT_UNCERTAIN");
+      await evictDurableObject(workspace);
+    }
+    expect((await workspace.counts()).sends).toBe(1);
+    await workspace.reconcile();
+    const resolved = await workspace.run(source, id);
+    expect(resolved.ok, JSON.stringify(resolved)).toBe(true);
+    if (resolved.ok) expect(resolved.values.receipt).toEqual({ delivery: "verified" });
+    expect((await workspace.counts()).sends).toBe(1);
+  });
+  it("stops replay when a pinned tool implementation changed", async () => {
+    const workspace = host();
+    const id = crypto.randomUUID();
+    const source = 'const offers = await tools.call("offers", {}); const sent = await tools.call("send", {to:"test@example.test"});';
+    await workspace.run(source, id);
+    await workspace.approve(`${id}:2`);
+    await workspace.changeToolVersion();
+    await evictDurableObject(workspace);
+    const result = await workspace.run(source, id);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("REPLAY_DIVERGENCE");
+    expect(await workspace.counts()).toEqual({ offers: 1, sends: 0 });
+  });
+  it("uses memory and R2 artifact handles from a restored code cell", async () => {
+    const workspace = host();
+    const first = await workspace.run('const saved = await memory.write({title:"Delivery exception",kind:"preference",value:{day:"Tuesday"}}); const file = await artifacts.write({name:"supplier.txt",text:"Requested Tuesday delivery."});');
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+    await evictDurableObject(workspace);
+    const next = await workspace.run('const exception = await memory.read(saved.id); const excerpt = await artifacts.read(file.id, {offset:10,length:7});');
+    expect(next.ok, JSON.stringify(next)).toBe(true);
+    if (next.ok) { expect(next.values.exception).toMatchObject({value:{day:"Tuesday"}}); expect(next.values.excerpt).toMatchObject({text:"Tuesday"}); }
+  });
   it("retains model-shaped data and helpers across eviction", async () => {
     const workspace = host();
     const first = await workspace.run('const offers = await tools.call("offers", {}); const evidence = { offers }; const alias = evidence; function cheapest(items: {price: number}[]) { return items.reduce((a, b) => a.price < b.price ? a : b); }');

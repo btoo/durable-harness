@@ -22,7 +22,10 @@ export class History {
     return this.store.transaction(() => {
       if (item.id) {
         const existing = this.store.get<HistoryItem>("history", item.id);
-        if (existing) return existing;
+        if (existing) {
+          invariant(existing.workspaceId === item.workspaceId && existing.role === item.role && existing.text === item.text && existing.audience === item.audience && JSON.stringify(existing.lineage) === JSON.stringify(item.lineage) && JSON.stringify(existing.metadata) === JSON.stringify(item.metadata), "REPLAY_DIVERGENCE", "This history ID already identifies a different event.");
+          return existing;
+        }
       }
       const sequence = (this.store.get<number>("counters", "history") ?? 0) + 1;
       const record: HistoryItem = { ...item, id: item.id ?? crypto.randomUUID(), sequence, createdAt: new Date().toISOString() };
@@ -76,7 +79,8 @@ export class EventLog {
       this.store.put("events", entry.id, entry);
       return entry;
     });
-    this.publish?.(record);
+    try { this.publish?.(record); }
+    catch { this.store.put("delivery_gaps", record.id, { eventId: record.id, sequence: record.sequence }); }
     return record;
   }
 

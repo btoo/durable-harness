@@ -1,19 +1,19 @@
 import { DurableObject } from "cloudflare:workers";
-import { DurableWorkspace, asFault, decodeGraph, type KnowledgeSpace, type Principal, type ToolDefinition } from "@durable-harness/core";
-import { CloudflareCellExecutor, durableStore } from "@durable-harness/cloudflare";
+import { Artifacts, DurableWorkspace, asFault, decodeGraph, type KnowledgeSpace, type Principal, type ToolDefinition } from "@durable-harness/core";
+import { CloudflareCellExecutor, R2Artifacts, durableStore } from "@durable-harness/cloudflare";
 
 export const developer: Principal = { id: "developer", deploymentId: "test", roles: ["developer"] };
 export const customer: Principal = { id: "customer", deploymentId: "test", roles: ["customer"] };
 
-export class WorkspaceTestHost extends DurableObject<{ LOADER: WorkerLoader }> {
+export class WorkspaceTestHost extends DurableObject<{ LOADER: WorkerLoader; ARTIFACTS: R2Bucket }> {
   private readonly store = durableStore(this.ctx);
   private readonly workspace: DurableWorkspace;
-  constructor(ctx: DurableObjectState, env: { LOADER: WorkerLoader }) {
+  constructor(ctx: DurableObjectState, env: { LOADER: WorkerLoader; ARTIFACTS: R2Bucket }) {
     super(ctx, env);
     const space: KnowledgeSpace = { id: "test", deploymentId: "test", kind: "tenant", label: "Test", revision: 1, grants: [{ principalId: developer.id, permissions: ["read", "write", "publish", "execute"] }, { principalId: customer.id, permissions: ["read", "write", "execute"] }] };
     if (!this.store.get("spaces", "test")) this.store.put("spaces", "test", space);
     const tools: ToolDefinition[] = [
-      { name: "offers", version: "1", description: "Read supplier offers", spaceId: "test", inputSchema: { type: "object" }, effect: "read", publicActivity: "Reading supplier offers", execute: async () => {
+      { name: "offers", version: this.store.get<string>("versions", "offers") ?? "1", description: "Read supplier offers", spaceId: "test", inputSchema: { type: "object" }, effect: "read", publicActivity: "Reading supplier offers", execute: async () => {
         this.store.put("counts", "offers", (this.store.get<number>("counts", "offers") ?? 0) + 1);
         return [{ supplier: "A", price: 120 }, { supplier: "B", price: 95 }];
       } },
@@ -21,8 +21,12 @@ export class WorkspaceTestHost extends DurableObject<{ LOADER: WorkerLoader }> {
         this.store.put("counts", "sends", (this.store.get<number>("counts", "sends") ?? 0) + 1);
         return { delivery: "simulated", to: (input as { to: string }).to };
       } },
+      { name: "uncertain", version: "1", description: "Simulate a lost response after delivery", spaceId: "test", inputSchema: { type: "object" }, effect: "external", publicActivity: "Sending a synthetic message", execute: async () => {
+        this.store.put("counts", "sends", (this.store.get<number>("counts", "sends") ?? 0) + 1);
+        throw new Error("The response was lost after the synthetic provider accepted the write.");
+      }, reconcile: async () => this.store.get("provider", "reconciled") ? { found: true, result: { delivery: "verified" } } : { found: false } },
     ];
-    this.workspace = new DurableWorkspace(this.store, new CloudflareCellExecutor(env.LOADER), { tools });
+    this.workspace = new DurableWorkspace(this.store, new CloudflareCellExecutor(env.LOADER), { tools, artifacts: new Artifacts(this.store, new R2Artifacts(env.ARTIFACTS)) });
   }
   async run(source: string, id = crypto.randomUUID(), identity = developer) {
     try { const result = await this.workspace.execute(identity, "test", source, { id }); return { ok: true as const, ...result, values: decodeGraph(result.workspace.graph) }; }
@@ -34,5 +38,7 @@ export class WorkspaceTestHost extends DurableObject<{ LOADER: WorkerLoader }> {
   counts() { return { offers: this.store.get<number>("counts", "offers") ?? 0, sends: this.store.get<number>("counts", "sends") ?? 0 }; }
   events(identity = developer, after = 0) { return this.workspace.events.read(identity, "test", after); }
   revoke() { this.workspace.access.setGrants(developer, "test", [{ principalId: developer.id, permissions: ["read", "write", "publish", "execute"] }], 1); }
+  reconcile() { this.store.put("provider", "reconciled", true); }
+  changeToolVersion() { this.store.put("versions", "offers", "2"); }
 }
 export default { fetch() { return new Response("Test worker"); } };

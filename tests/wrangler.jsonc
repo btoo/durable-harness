@@ -5,5 +5,6 @@
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": { "bindings": [{ "name": "WORKSPACES", "class_name": "WorkspaceTestHost" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WorkspaceTestHost"] }],
-  "worker_loaders": [{ "binding": "LOADER" }]
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "durable-harness-test-artifacts" }]
 }

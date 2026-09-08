@@ -7,3 +7,6 @@ export * from "./history.js";
 export * from "./cell.js";
 export * from "./memory.js";
 export * from "./context.js";
+export * from "./learning.js";
+export * from "./artifacts.js";
+export * from "./connections.js";

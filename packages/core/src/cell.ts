@@ -3,6 +3,8 @@ import { compileCell, contentHash } from "./compiler.js";
 import { asFault, HarnessFault, invariant } from "./errors.js";
 import { EventLog, History } from "./history.js";
 import { AccessPolicy } from "./policy.js";
+import { Memory, type MemoryWrite } from "./memory.js";
+import type { Artifacts, ArtifactWrite } from "./artifacts.js";
 import { Validator } from "@cfworker/json-schema";
 import { DEFAULT_CELL_BUDGET, type Budget, type CellExecutor, type CellRecord, type OperationRecord, type Principal, type RecordStore, type SourceRef, type ToolDefinition, type WorkspaceSnapshot } from "./types.js";
 
@@ -16,14 +18,18 @@ export class DurableWorkspace {
   private readonly tools = new Map<string, ToolDefinition>();
   private readonly active = new Set<string>();
 
-  constructor(readonly store: RecordStore, private readonly executor: CellExecutor, options: { tools?: ToolDefinition[]; publish?: ConstructorParameters<typeof EventLog>[1]; beforeOperation?: () => Promise<void> } = {}) {
+  constructor(readonly store: RecordStore, private readonly executor: CellExecutor, options: { tools?: ToolDefinition[]; memory?: Memory; artifacts?: Artifacts; publish?: ConstructorParameters<typeof EventLog>[1]; beforeOperation?: () => Promise<void> } = {}) {
     this.access = new AccessPolicy(store);
     this.history = new History(store);
     this.events = new EventLog(store, options.publish);
     this.beforeOperation = options.beforeOperation;
+    this.memory = options.memory ?? new Memory(store);
+    this.artifacts = options.artifacts;
     for (const tool of options.tools ?? []) this.tools.set(tool.name, tool);
   }
   private readonly beforeOperation: (() => Promise<void>) | undefined;
+  private readonly memory: Memory;
+  private readonly artifacts: Artifacts | undefined;
 
   snapshot(principal: Principal, workspaceId: string): WorkspaceSnapshot {
     this.access.require(principal, workspaceId, "read");
@@ -127,6 +133,10 @@ export class DurableWorkspace {
         this.events.append({ workspaceId, kind: "operation.started", audience: "customer", text: tool.publicActivity, data: { operationId }, lineage: [...lineage] });
         try {
           const output = await tool.execute(input, { principal, operationId, workspaceId });
+          if (tool.outputSchema) {
+            const validation = new Validator(tool.outputSchema).validate(output);
+            invariant(validation.valid, "INVALID_TOOL_RESULT", `The ${name} result does not match its declared schema.`);
+          }
           // Serialization failure after a write is an uncertain effect, never permission to retry it.
           const encoded = encodeGraph({ result: output });
           lineage.push({ spaceId: tool.spaceId, itemId: operationId });
@@ -139,7 +149,8 @@ export class DurableWorkspace {
           return output;
         } catch (error) {
           const fault = asFault(error);
-          if (fault.code === "ACCESS_DENIED" && this.store.get<OperationRecord>("operations", operationId)?.status === "completed") throw fault;
+          // Delivery or diagnostics can fail after the result has settled. Never rewrite it.
+          if (this.store.get<OperationRecord>("operations", operationId)?.status === "completed") throw fault;
           if (fault.code === "RECONNECTION_REQUIRED") { this.store.put("operations", operationId, { ...operation, status: "approved" }); throw fault; }
           const uncertain = tool.effect === "external";
           this.store.put("operations", operationId, { ...operation, status: uncertain ? "uncertain" : "failed", error: fault.message });
@@ -212,9 +223,36 @@ export class DurableWorkspace {
     if (name === "@history.read" || name === "@history.around") return builtin(async input => {
       const id = String((input as { id: unknown }).id);
       const item = this.history.read(principal, id);
-      lineage.push({ spaceId: item.workspaceId, itemId: id }, ...item.lineage);
-      return name.endsWith("around") ? this.history.around(principal, id) : item;
+      const items = name.endsWith("around") ? this.history.around(principal, id) : [item];
+      for (const entry of items) lineage.push({ spaceId: entry.workspaceId, itemId: entry.id }, ...entry.lineage);
+      return name.endsWith("around") ? items : item;
     });
+    if (name === "@memory.read") return builtin(async input => {
+      const entry = this.memory.read(principal, String((input as { id: unknown }).id));
+      lineage.push({ spaceId: entry.spaceId, itemId: entry.id }, ...entry.lineage);
+      return { ...entry, value: decodeGraph(entry.value).value };
+    });
+    if (name === "@memory.write") return builtin(async (input, context) => {
+      // The mutation receipt and memory revision settle in the same transaction.
+      return this.store.transaction(() => {
+        const previous = this.store.get("memory_operations", context.operationId);
+        if (previous) return previous;
+        const entry = this.memory.write(principal, { ...(input as MemoryWrite), spaceId: workspaceId }, lineage);
+        this.store.put("memory_operations", context.operationId, entry);
+        return entry;
+      });
+    }, "idempotent");
+    if (name === "@artifacts.read") return builtin(async input => {
+      invariant(this.artifacts, "NOT_CONFIGURED", "Configure an artifact backend to read large retained values.");
+      const options = input as { id: string; offset?: number; length?: number };
+      const result = await this.artifacts.read(principal, options.id, options);
+      lineage.push({ spaceId: result.spaceId, itemId: result.id }, ...result.lineage);
+      return result;
+    });
+    if (name === "@artifacts.write") return builtin(async (input, context) => {
+      invariant(this.artifacts, "NOT_CONFIGURED", "Configure an artifact backend to retain large values.");
+      return this.artifacts.write(principal, { ...(input as ArtifactWrite), spaceId: workspaceId }, lineage, context.operationId);
+    }, "idempotent");
     if (name === "@tools.search") return builtin(async input => {
       const query = String((input as { query: unknown }).query).toLowerCase();
       return [...this.tools.values()].filter(tool => this.access.permits(principal, tool.spaceId, "execute") && `${tool.name} ${tool.description}`.toLowerCase().includes(query)).slice(0, 10).map(({ name, description, version, effect }) => ({ name, description, version, effect }));
